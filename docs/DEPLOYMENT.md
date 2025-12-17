@@ -27,29 +27,113 @@ This document provides comprehensive deployment instructions for the e-commerce 
 
 ## Local Development
 
-### 1. Start Services
+### One-Click Setup (Recommended)
+
+The easiest way to get started is using the automated setup script:
+
+```bash
+npm run setup
+```
+
+This single command will:
+- ✅ Check all prerequisites (Node.js, Docker, Docker Compose)
+- ✅ Create `.env` file from `.env.example`
+- ✅ Auto-generate secure JWT secrets
+- ✅ Start PostgreSQL and Redis via Docker Compose
+- ✅ Install all npm dependencies
+- ✅ Generate Prisma client
+- ✅ Run database migrations
+- ✅ Optionally seed the database with sample data
+
+**Quick Setup (Skip Prompts):**
+```bash
+npm run setup:quick
+```
+
+**Using Bash Script (Unix/Mac):**
+```bash
+npm run setup:local
+```
+
+### Manual Setup (Alternative)
+
+If you prefer to set up manually:
+
+#### 1. Clone and Install
+
+```bash
+git clone <repository-url>
+cd ecommerce-backend
+npm install
+```
+
+#### 2. Create Environment File
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and update the values. The setup script auto-generates JWT secrets, but for manual setup, you'll need to:
+
+- Generate secure JWT secrets (use `npm run generate:secrets`)
+- Update `JWT_SECRET` and `JWT_REFRESH_SECRET` in `.env`
+- Configure optional services (email, payment gateways)
+
+#### 3. Start Docker Services
 
 ```bash
 docker-compose up -d
 ```
 
-### 2. Run Migrations
+#### 4. Generate Prisma Client
+
+```bash
+npm run prisma:generate
+```
+
+#### 5. Run Migrations
 
 ```bash
 npm run prisma:migrate
 ```
 
-### 3. Seed Database
+#### 6. Seed Database (Optional)
 
 ```bash
 npm run prisma:seed
 ```
 
-### 4. Start Application
+#### 7. Start Application
 
 ```bash
 npm run dev
 ```
+
+### Verify Setup
+
+After setup, verify everything is working:
+
+```bash
+# Check health endpoint
+curl http://localhost:3000/health
+
+# Access API documentation
+open http://localhost:3000/api-docs
+
+# Open Prisma Studio (database GUI)
+npm run prisma:studio
+```
+
+### Environment Variables
+
+The `.env` file is automatically created by the setup script. Key variables:
+
+- **JWT_SECRET** & **JWT_REFRESH_SECRET**: Auto-generated secure secrets
+- **DATABASE_URL**: PostgreSQL connection (defaults to Docker Compose)
+- **REDIS_URL**: Redis connection (defaults to Docker Compose)
+- **ADMIN_EMAIL** & **ADMIN_PASSWORD**: Admin account for seeding
+
+See `.env.example` for all available configuration options.
 
 ## Docker Deployment
 

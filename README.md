@@ -4,6 +4,12 @@ A production-ready, Dockerized e-commerce backend API built with Node.js, Expres
 
 ## Features
 
+### Setup & Deployment
+- 🚀 **One-Click Setup** - Automated setup script with auto-generated secrets
+- 🐳 **Docker Ready** - Complete Docker Compose configuration
+- ☁️ **Cloud Platform Support** - Pre-configured for Render and Railway
+- 🔒 **Secure by Default** - Auto-generated cryptographically secure secrets
+
 ### Core Features
 - ✅ **User Authentication & Authorization** - JWT-based auth, email verification, password reset
 - ✅ **Product Management** - CRUD operations, variants, categories, search
@@ -48,7 +54,45 @@ A production-ready, Dockerized e-commerce backend API built with Node.js, Expres
 - PostgreSQL 14+ (or use Docker)
 - Redis (or use Docker)
 
-## Installation
+## Quick Start
+
+### One-Click Setup (Recommended)
+
+Get everything set up with a single command:
+
+```bash
+git clone <repository-url>
+cd ecommerce-backend
+npm run setup
+```
+
+That's it! The setup script will:
+- ✅ Check prerequisites (Node.js 18+, Docker, Docker Compose)
+- ✅ Create `.env` file with auto-generated secure secrets
+- ✅ Start PostgreSQL and Redis via Docker Compose
+- ✅ Install dependencies
+- ✅ Generate Prisma client
+- ✅ Run database migrations
+- ✅ Optionally seed the database
+
+**Quick Setup (Skip Prompts):**
+```bash
+npm run setup:quick
+```
+
+**After setup, start the server:**
+```bash
+npm run dev
+```
+
+**Access the API:**
+- API Documentation: http://localhost:3000/api-docs
+- Health Check: http://localhost:3000/health
+- Prisma Studio: `npm run prisma:studio`
+
+## Installation (Manual)
+
+If you prefer manual setup:
 
 1. **Clone the repository**
 ```bash
@@ -64,6 +108,7 @@ npm install
 3. **Set up environment variables**
 ```bash
 cp .env.example .env
+# Generate secrets: npm run generate:secrets
 # Edit .env with your configuration
 ```
 

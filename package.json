@@ -4,6 +4,10 @@
   "description": "Production-ready e-commerce backend API with Node.js/Express, PostgreSQL, and Docker",
   "main": "src/server.js",
   "scripts": {
+    "setup": "node scripts/setup.js",
+    "setup:local": "bash scripts/setup.sh",
+    "setup:quick": "node scripts/setup.js --quick",
+    "generate:secrets": "node scripts/generate-secrets.js",
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "jest",
