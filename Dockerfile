@@ -4,7 +4,7 @@
 FROM node:18-alpine AS dependencies
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Stage 2: Build
 FROM node:18-alpine AS build
@@ -18,6 +18,9 @@ RUN npx prisma generate
 FROM node:18-alpine AS production
 WORKDIR /app
 
+# Install netcat for database connection checking in entrypoint script
+RUN apk add --no-cache netcat-openbsd
+
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
@@ -28,6 +31,10 @@ COPY --from=build --chown=nodejs:nodejs /app/node_modules/.prisma ./node_modules
 COPY --from=build --chown=nodejs:nodejs /app/src ./src
 COPY --from=build --chown=nodejs:nodejs /app/prisma ./prisma
 COPY --chown=nodejs:nodejs package*.json ./
+
+# Copy and set up entrypoint script
+COPY --chown=nodejs:nodejs docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
 
 # Create necessary directories
 RUN mkdir -p uploads logs && chown -R nodejs:nodejs uploads logs
@@ -40,6 +47,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-CMD ["node", "src/server.js"]
+# Use entrypoint script to run migrations before starting server
+ENTRYPOINT ["./docker-entrypoint.sh"]
 
 
