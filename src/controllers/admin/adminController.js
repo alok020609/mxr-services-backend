@@ -1,5 +1,5 @@
-const prisma = require('../config/database');
-const { asyncHandler } = require('../utils/asyncHandler');
+const prisma = require('../../config/database');
+const { asyncHandler } = require('../../utils/asyncHandler');
 
 const getDashboard = asyncHandler(async (req, res) => {
   const [

@@ -1,5 +1,5 @@
-const prisma = require('../config/database');
-const { asyncHandler } = require('../utils/asyncHandler');
+const prisma = require('../../config/database');
+const { asyncHandler } = require('../../utils/asyncHandler');
 const authService = require('../../services/authService');
 
 const getUsers = asyncHandler(async (req, res) => {
@@ -7,7 +7,7 @@ const getUsers = asyncHandler(async (req, res) => {
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const where = {
-    ...(role && { role }),
+    ...(role && { role: role.toUpperCase() }),
     ...(isActive !== undefined && { isActive: isActive === 'true' }),
     ...(search && {
       OR: [
@@ -32,7 +32,17 @@ const getUsers = asyncHandler(async (req, res) => {
         role: true,
         emailVerified: true,
         isActive: true,
+        tenantId: true,
         createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            orders: true,
+            reviews: true,
+            addresses: true,
+            wishlist: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }),
@@ -113,24 +123,79 @@ const createUser = asyncHandler(async (req, res) => {
 });
 
 const updateUser = asyncHandler(async (req, res) => {
-  const { firstName, lastName, phone, role, isActive } = req.body;
+  const { 
+    email, 
+    firstName, 
+    lastName, 
+    phone, 
+    role, 
+    isActive, 
+    emailVerified,
+    password 
+  } = req.body;
+
+  // Check if user exists
+  const existingUser = await prisma.user.findUnique({
+    where: { id: req.params.id },
+  });
+
+  if (!existingUser) {
+    return res.status(404).json({
+      success: false,
+      error: 'User not found',
+    });
+  }
+
+  // If email is being updated, check for uniqueness
+  if (email && email !== existingUser.email) {
+    const emailExists = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (emailExists) {
+      return res.status(409).json({
+        success: false,
+        error: 'Email already exists',
+      });
+    }
+  }
+
+  // Build update data object (only include fields that are provided)
+  const updateData = {};
+  
+  if (email !== undefined) updateData.email = email;
+  if (firstName !== undefined) updateData.firstName = firstName;
+  if (lastName !== undefined) updateData.lastName = lastName;
+  if (phone !== undefined) updateData.phone = phone;
+  if (role !== undefined) updateData.role = role;
+  if (isActive !== undefined) updateData.isActive = isActive;
+  if (emailVerified !== undefined) updateData.emailVerified = emailVerified;
+  
+  // If email is changed, reset email verification
+  if (email && email !== existingUser.email) {
+    updateData.emailVerified = false;
+    updateData.verificationToken = null;
+  }
+
+  // Hash password if provided
+  if (password) {
+    updateData.password = await authService.hashPassword(password);
+  }
 
   const user = await prisma.user.update({
     where: { id: req.params.id },
-    data: {
-      firstName,
-      lastName,
-      phone,
-      role,
-      isActive,
-    },
+    data: updateData,
     select: {
       id: true,
       email: true,
       firstName: true,
       lastName: true,
+      phone: true,
       role: true,
+      emailVerified: true,
       isActive: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 

@@ -1,12 +1,14 @@
-const prisma = require('../config/database');
-const { asyncHandler } = require('../utils/asyncHandler');
+const prisma = require('../../config/database');
+const { asyncHandler } = require('../../utils/asyncHandler');
+const { restoreOrderInventory } = require('../../services/orderInventoryRestore');
 
 const getOrders = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, status, search } = req.query;
+  const { page = 1, limit = 20, status, userId, search } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const where = {
     ...(status && { status }),
+    ...(userId && { userId }),
     ...(search && {
       OR: [
         { orderNumber: { contains: search, mode: 'insensitive' } },
@@ -38,6 +40,19 @@ const getOrders = asyncHandler(async (req, res) => {
                 images: true,
               },
             },
+            variant: true,
+            service: true,
+          },
+        },
+        payments: {
+          select: {
+            id: true,
+            status: true,
+            amount: true,
+            gateway: true,
+            paymentMethod: true,
+            currency: true,
+            createdAt: true,
           },
         },
       },
@@ -67,6 +82,7 @@ const getOrder = asyncHandler(async (req, res) => {
         include: {
           product: true,
           variant: true,
+          service: true,
         },
       },
       payments: {
@@ -79,6 +95,11 @@ const getOrder = asyncHandler(async (req, res) => {
       notes: true,
       stateHistory: {
         orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+        },
       },
     },
   });
@@ -115,6 +136,14 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
     data: { status },
   });
 
+  // When setting order to PAID, align payment records so list/detail show Payment as paid
+  if (status === 'PAID') {
+    await prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: { status: 'SUCCEEDED' },
+    });
+  }
+
   // Record state history
   await prisma.orderStateHistory.create({
     data: {
@@ -134,6 +163,9 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
 const cancelOrder = asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
+    include: {
+      items: { select: { productId: true, variantId: true, quantity: true } },
+    },
   });
 
   if (!order) {
@@ -143,19 +175,24 @@ const cancelOrder = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: req.params.id },
-    data: { status: 'CANCELLED' },
-  });
-
-  await prisma.orderStateHistory.create({
-    data: {
-      orderId: order.id,
-      fromState: order.status,
-      toState: 'CANCELLED',
-      userId: req.user.id,
-      reason: 'Admin cancelled',
-    },
+  const updatedOrder = await prisma.$transaction(async (tx) => {
+    await restoreOrderInventory(tx, order.items);
+    await tx.order.update({
+      where: { id: order.id },
+      data: { status: 'CANCELLED' },
+    });
+    await tx.orderStateHistory.create({
+      data: {
+        orderId: order.id,
+        fromState: order.status,
+        toState: 'CANCELLED',
+        userId: req.user.id,
+        reason: 'Admin cancelled',
+      },
+    });
+    return tx.order.findUnique({
+      where: { id: order.id },
+    });
   });
 
   res.json({
