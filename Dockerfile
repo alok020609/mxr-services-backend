@@ -18,8 +18,8 @@ RUN npx prisma generate
 FROM node:18-alpine AS production
 WORKDIR /app
 
-# Install netcat for database connection checking in entrypoint script
-RUN apk add --no-cache netcat-openbsd
+# Install netcat for database connection checking in entrypoint script, openssl for Prisma
+RUN apk add --no-cache netcat-openbsd openssl
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \

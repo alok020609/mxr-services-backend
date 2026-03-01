@@ -26,6 +26,7 @@ warning() {
 }
 
 # Wait for database to be ready (best-effort; migrations will fail if DB is unreachable)
+# DATABASE_URL is read from the runtime environment (e.g. Render injects it); no .env file in production.
 wait_for_db() {
     log "Waiting for database to be ready..."
     
@@ -65,6 +66,15 @@ wait_for_db() {
 # Run Prisma migrations
 run_migrations() {
     log "Running database migrations..."
+    
+    if [ -z "$DATABASE_URL" ]; then
+        error "DATABASE_URL is not set. On Render: link the database to this service in the dashboard or Blueprint so Render injects the internal URL."
+    fi
+    
+    # On Render, DATABASE_URL must be the internal DB URL, not localhost
+    if echo "$DATABASE_URL" | grep -qE 'localhost|127\.0\.0\.1'; then
+        error "DATABASE_URL points to localhost. On Render you must use the Internal Database URL from your Postgres service (Dashboard -> ecommerce-db -> Connect -> Internal). Link the database to this web service so Render injects it."
+    fi
     
     # Check if Prisma is available
     if ! command -v npx > /dev/null 2>&1; then

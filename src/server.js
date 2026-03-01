@@ -1,9 +1,17 @@
-require('dotenv').config();
+// Load .env only in development; production (e.g. Render) uses platform-injected env vars only
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
+const { apiVersioning, apiDeprecation, requestTransformation, burstRateLimiter, getEndpointRateLimiter } = require('./middleware/apiGateway');
+const { tenantContext, adminTenantBypass } = require('./middleware/tenantContext');
+const { requestLogger, performanceMonitor } = require('./middleware/monitoring');
+const { etagMiddleware } = require('./middleware/etag');
+const { attachDataLoaders } = require('./utils/dataloader');
 
 const app = express();
 
@@ -12,8 +20,44 @@ app.use(helmet());
 app.use(compression());
 
 // CORS configuration
+// In development, allow multiple localhost origins for flexibility
+const getCorsOrigin = () => {
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL;
+  }
+  
+  // In development, allow common localhost ports
+  if (process.env.NODE_ENV !== 'production') {
+    return (origin, callback) => {
+      // Allow requests from common development ports
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+        'http://localhost:8080',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:3001',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:8080'
+      ];
+      
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Allow all in development for flexibility
+      }
+    };
+  }
+  
+  // Production default
+  return 'http://localhost:3000';
+};
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: getCorsOrigin(),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -40,13 +84,84 @@ app.use(attachDataLoaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve uploaded files statically with explicit CORS headers
+const path = require('path');
+
+// Middleware to add CORS headers to static file responses
+const staticFileCors = (req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Determine allowed origin
+  let allowedOrigin = null;
+  
+  if (process.env.FRONTEND_URL) {
+    // Use configured FRONTEND_URL if set
+    allowedOrigin = process.env.FRONTEND_URL;
+  } else if (process.env.NODE_ENV !== 'production') {
+    // In development, allow common localhost origins
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173',
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:8080'
+    ];
+    
+    if (origin && allowedOrigins.includes(origin)) {
+      allowedOrigin = origin;
+    } else if (origin) {
+      // In development, allow the requesting origin for flexibility
+      allowedOrigin = origin;
+    } else {
+      // No origin header (e.g., direct file access), allow all in development
+      allowedOrigin = '*';
+    }
+  } else {
+    // Production default
+    allowedOrigin = 'http://localhost:3000';
+  }
+  
+  // Set CORS headers explicitly
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+};
+
+// Apply CORS middleware before static file serving
+app.use('/uploads', staticFileCors, express.static(path.join(__dirname, '../uploads')));
+
 // Swagger documentation
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   explorer: true,
-  customCss: '.swagger-ui .topbar { display: none }',
+  customCss: `
+    .swagger-ui .topbar { display: none }
+    .swagger-ui .auth-wrapper { margin: 20px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; }
+    .swagger-ui .auth-btn-wrapper { display: block !important; }
+  `,
   customSiteTitle: 'E-commerce API Documentation',
+  swaggerOptions: {
+    persistAuthorization: true, // Persist authorization across page refreshes
+    displayRequestDuration: true,
+    filter: true,
+    showExtensions: true,
+    showCommonExtensions: true,
+    tryItOutEnabled: true, // Enable "Try it out" by default
+  },
 }));
 
 // Health check endpoint
@@ -73,6 +188,16 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const adminRoutes = require('./routes/admin/adminRoutes');
+const adminPaymentGatewayRoutes = require('./routes/admin/adminPaymentGatewayRoutes');
+const adminEmailServiceRoutes = require('./routes/admin/adminEmailServiceRoutes');
+const adminSMSServiceRoutes = require('./routes/admin/adminSMSServiceRoutes');
+const adminLogisticsProviderRoutes = require('./routes/admin/adminLogisticsProviderRoutes');
+const adminQuestionRoutes = require('./routes/admin/adminQuestionRoutes');
+const adminCurrencyRoutes = require('./routes/admin/adminCurrencyRoutes');
+const adminMailSettingsRoutes = require('./routes/admin/adminMailSettingsRoutes');
+const adminInvoiceRoutes = require('./routes/admin/adminInvoiceRoutes');
+const adminContactSubmissionRoutes = require('./routes/admin/adminContactSubmissionRoutes');
+const logisticsRoutes = require('./routes/logisticsRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const languageRoutes = require('./routes/languageRoutes');
 const supportRoutes = require('./routes/supportRoutes');
@@ -115,14 +240,12 @@ const observabilityRoutes = require('./routes/observabilityRoutes');
 const multiTenantRoutes = require('./routes/multiTenantRoutes');
 const migrationRoutes = require('./routes/migrationRoutes');
 const disasterRecoveryRoutes = require('./routes/disasterRecoveryRoutes');
-const { apiVersioning, apiDeprecation, requestTransformation, burstRateLimiter, getEndpointRateLimiter } = require('./middleware/apiGateway');
-const { tenantContext, adminTenantBypass } = require('./middleware/tenantContext');
-const { requestLogger, performanceMonitor } = require('./middleware/monitoring');
-const { etagMiddleware } = require('./middleware/etag');
-const { attachDataLoaders } = require('./utils/dataloader');
+const serviceRoutes = require('./routes/serviceRoutes');
+const adminServiceRoutes = require('./routes/admin/adminServiceRoutes');
 const apiVersion = process.env.API_VERSION || 'v1';
 app.use(`/api/${apiVersion}/auth`, authRoutes);
 app.use(`/api/${apiVersion}/products`, productRoutes);
+app.use(`/api/${apiVersion}/services`, serviceRoutes);
 app.use(`/api/${apiVersion}/cart`, cartRoutes);
 app.use(`/api/${apiVersion}/orders`, orderRoutes);
 app.use(`/api/${apiVersion}/payments`, paymentRoutes);
@@ -135,6 +258,17 @@ app.use(`/api/${apiVersion}/notifications`, notificationRoutes);
 app.use(`/api/${apiVersion}/inventory`, inventoryRoutes);
 app.use(`/api/${apiVersion}/reviews`, reviewRoutes);
 app.use(`/api/${apiVersion}/admin`, adminRoutes);
+app.use(`/api/${apiVersion}/admin/payment-gateways`, adminPaymentGatewayRoutes);
+app.use(`/api/${apiVersion}/admin/email-services`, adminEmailServiceRoutes);
+app.use(`/api/${apiVersion}/admin/sms-services`, adminSMSServiceRoutes);
+app.use(`/api/${apiVersion}/admin/logistics-providers`, adminLogisticsProviderRoutes);
+app.use(`/api/${apiVersion}/admin/questions`, adminQuestionRoutes);
+app.use(`/api/${apiVersion}/admin/currencies`, adminCurrencyRoutes);
+app.use(`/api/${apiVersion}/admin/mail-settings`, adminMailSettingsRoutes);
+app.use(`/api/${apiVersion}/admin/invoices`, adminInvoiceRoutes);
+app.use(`/api/${apiVersion}/admin/contact-submissions`, adminContactSubmissionRoutes);
+app.use(`/api/${apiVersion}/admin/services`, adminServiceRoutes);
+app.use(`/api/${apiVersion}/logistics`, logisticsRoutes);
 app.use(`/api/${apiVersion}/currencies`, currencyRoutes);
 app.use(`/api/${apiVersion}/languages`, languageRoutes);
 app.use(`/api/${apiVersion}/support`, supportRoutes);
@@ -163,7 +297,7 @@ app.use(`/api/${apiVersion}/inventory/advanced`, advancedInventoryRoutes);
 app.use(`/api/${apiVersion}/customer-service`, customerServiceEnhancedRoutes);
 app.use(`/api/${apiVersion}/social`, socialCommerceRoutes);
 app.use(`/api/${apiVersion}/admin/advanced`, advancedAdminRoutes);
-app.use(`/api/${apiVersion}/analytics`, advancedAnalyticsRoutes);
+app.use(`/api/${apiVersion}/analytics/advanced`, advancedAnalyticsRoutes);
 app.use(`/api/${apiVersion}/mobile`, mobileBackendRoutes);
 app.use(`/api/${apiVersion}/i18n`, internationalizationRoutes);
 app.use(`/api/${apiVersion}/payments/advanced`, advancedPaymentsRoutes);
@@ -177,6 +311,12 @@ app.use(`/api/${apiVersion}/observability`, observabilityRoutes);
 app.use(`/api/${apiVersion}/tenants`, multiTenantRoutes);
 app.use(`/api/${apiVersion}/migrations`, migrationRoutes);
 app.use(`/api/${apiVersion}/disaster-recovery`, disasterRecoveryRoutes);
+const mediaRoutes = require('./routes/mediaRoutes');
+const productImageRoutes = require('./routes/productImageRoutes');
+const batchRoutes = require('./routes/batchRoutes');
+app.use(`/api/${apiVersion}/media`, mediaRoutes);
+app.use(`/api/${apiVersion}/products`, productImageRoutes);
+app.use(`/api/${apiVersion}/batch`, batchRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFound);
@@ -186,6 +326,17 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+
+  // Auto-cancel expired unpaid orders (e.g. every hour)
+  const cron = require('node-cron');
+  const pendingOrderCancelService = require('./services/pendingOrderCancelService');
+  cron.schedule('0 * * * *', async () => {
+    try {
+      await pendingOrderCancelService.cancelExpiredUnpaidOrders();
+    } catch (err) {
+      console.error('Pending order cancel job failed:', err.message);
+    }
+  });
 });
 
 module.exports = app;

@@ -2,7 +2,8 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -51,6 +52,19 @@ enum PaymentGatewayType {
   CRYPTO
   BANK_TRANSFER
   COD
+  PHONEPE
+  GPAY
+  PAYTM
+}
+
+enum LogisticsProviderType {
+  SHIPROCKET
+  DELHIVERY
+  CLICKPOST
+  VAMASHIP
+  SHIPJEE
+  INDISPEED
+  ULIP
 }
 
 enum ReviewStatus {
@@ -81,6 +95,12 @@ enum ShippingMethodType {
 enum TaxRuleType {
   PERCENTAGE
   FIXED
+}
+
+enum ServiceType {
+  CONSULTING
+  REPAIR
+  INSTALLATION
 }
 
 enum NotificationType {
@@ -117,6 +137,12 @@ enum TicketPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+enum ContactSubmissionStatus {
+  NEW
+  WAITING_FOR_CONFIRMATION
+  DONE
 }
 
 enum LoyaltyPointsType {
@@ -173,6 +199,31 @@ enum JobStatus {
   FAILED
 }
 
+enum DeprecationStatus {
+  ANNOUNCED
+  DEPRECATED
+  SUNSET
+}
+
+enum APIVersionStatus {
+  CURRENT
+  DEPRECATED
+  SUNSET
+}
+
+enum EmailServiceType {
+  SMTP
+  SENDGRID
+  MAILGUN
+  AWS_SES
+}
+
+enum SMSServiceType {
+  TWILIO
+  AWS_SNS
+  MESSAGEBIRD
+}
+
 enum LogLevel {
   INFO
   WARN
@@ -201,7 +252,10 @@ model User {
   resetPasswordToken    String?
   resetPasswordExpires  DateTime?
   isActive              Boolean   @default(true)
+  apiTier               String?   @default("free") // API tier: free, basic, premium, enterprise
   tenantId              String?
+  googleId              String?   @unique
+  microsoftId          String?   @unique
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -212,6 +266,7 @@ model User {
   wishlist              Wishlist[]
   notifications         Notification[]
   supportTickets        SupportTicket[]
+  contactSubmissions    ContactSubmission[]
   loyaltyPoints         LoyaltyPoints[]
   wallet                Wallet?
   storeCredits          StoreCredit[]
@@ -227,11 +282,16 @@ model User {
   devices               Device[]
   apiKeys               APIKey[]
   auditLogs             AuditLog[]
-  activityLogs         ActivityLog[]
+  activityLogs         ActivityLog[] @relation("ActivityLogUser")
+  adminActivityLogs    ActivityLog[] @relation("ActivityLogAdmin")
+  orderNotesAsAdmin    OrderNote[] @relation("OrderNoteAdmin")
   referrals             Referral[] @relation("Referrer")
   referredBy            Referral[] @relation("Referred")
   giftRegistries        GiftRegistry[]
   tenant                Tenant?    @relation(fields: [tenantId], references: [id])
+  apiUsage              APIUsage[]
+  userAcceptances       UserAcceptance[]
+  orderStateHistories   OrderStateHistory[]
 
   @@index([email])
   @@index([tenantId])
@@ -271,6 +331,7 @@ model Category {
   parent      Category? @relation("CategoryTree", fields: [parentId], references: [id])
   children    Category[] @relation("CategoryTree")
   products    Product[]
+  services    Service[]
   translations Translation[] @relation("TranslationCategory")
   tenant      Tenant?   @relation(fields: [tenantId], references: [id])
 
@@ -285,15 +346,33 @@ model Product {
   slug              String    @unique
   price             Decimal   @db.Decimal(10, 2)
   compareAtPrice    Decimal?  @db.Decimal(10, 2)
+  originalPrice     Decimal?  @db.Decimal(10, 2)
   sku               String?   @unique
+  stock             Int       @default(0)
   images            String[]  @default([])
   categoryId        String?
   isActive          Boolean   @default(true)
+  isFeatured        Boolean   @default(false)
+  featuredOrder     Int?
   badges            Json?     @default("[]")
   specifications    Json?
   certifications    Json?     @default("[]")
   warrantyInfo      String?
   lifecycle         String?
+  // Policy fields (JSON for structured data)
+  returnPolicy      Json?
+  refundPolicy      Json?
+  shippingPolicy    Json?
+  exchangePolicy    Json?
+  cancellationPolicy Json?
+  // Product information fields
+  careInstructions  String?   @db.Text
+  countryOfOrigin   String?
+  manufacturerInfo  Json?
+  brand             String?
+  modelNumber       String?
+  // Physical attributes (JSON for structured data)
+  weightDimensions  Json?
   minOrderQuantity  Int       @default(1)
   maxOrderQuantity  Int?
   tenantId          String?
@@ -329,11 +408,44 @@ model Product {
   warehouseStocks   WarehouseStock[]
   tenant            Tenant?  @relation(fields: [tenantId], references: [id])
   productBadges     ProductBadge[]
+  services          Service[]
 
   @@index([slug])
   @@index([categoryId])
   @@index([tenantId])
   @@index([isActive])
+  @@index([isFeatured])
+}
+
+model Service {
+  id               String      @id @default(cuid())
+  name             String
+  slug             String      @unique
+  description      String?     @db.Text
+  price            Decimal     @db.Decimal(10, 2)
+  type             ServiceType
+  productId        String?
+  categoryId       String?
+  durationMinutes  Int?
+  isActive         Boolean     @default(true)
+  image            String?
+  metadata         Json?
+  tenantId         String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  product          Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  category         Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  tenant           Tenant?     @relation(fields: [tenantId], references: [id])
+
+  @@index([slug])
+  @@index([type])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([tenantId])
 }
 
 model ProductVariant {
@@ -378,18 +490,21 @@ model Cart {
 model CartItem {
   id          String         @id @default(cuid())
   cartId      String
-  productId  String
-  variantId  String?
+  productId   String?
+  variantId   String?
+  serviceId   String?
   quantity   Int
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
   cart        Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product     Product        @relation(fields: [productId], references: [id])
+  product     Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
   variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  service     Service?       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@index([cartId])
   @@index([productId])
+  @@index([serviceId])
 }
 
 model Order {
@@ -432,6 +547,7 @@ model Order {
   creditNotes     CreditNote[]
   giftCardTransactions GiftCardTransaction[]
   stateHistory    OrderStateHistory[]
+  logisticsShipments  LogisticsShipment[]
   tenant          Tenant?     @relation(fields: [tenantId], references: [id])
 
   @@index([userId])
@@ -444,20 +560,23 @@ model Order {
 model OrderItem {
   id          String    @id @default(cuid())
   orderId     String
-  productId  String
-  variantId  String?
+  productId   String?
+  variantId   String?
+  serviceId   String?
   quantity   Int
   price      Decimal   @db.Decimal(10, 2)
   total      Decimal   @db.Decimal(10, 2)
   createdAt  DateTime  @default(now())
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product   @relation(fields: [productId], references: [id])
+  product     Product?  @relation(fields: [productId], references: [id])
   variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  service     Service?  @relation(fields: [serviceId], references: [id])
   customizations CustomizationValue[]
 
   @@index([orderId])
   @@index([productId])
+  @@index([serviceId])
 }
 
 model Payment {
@@ -811,7 +930,8 @@ model ActivityLog {
   userAgent   String?
   createdAt   DateTime  @default(now())
 
-  user        User?     @relation(fields: [userId], references: [id])
+  user        User?     @relation("ActivityLogUser", fields: [userId], references: [id])
+  admin       User?     @relation("ActivityLogAdmin", fields: [adminId], references: [id])
 
   @@index([userId])
   @@index([adminId])
@@ -961,6 +1081,31 @@ model FAQ {
 
   @@index([category])
   @@index([isActive])
+}
+
+model ContactSubmission {
+  id                     String                    @id @default(cuid())
+  name                   String
+  email                  String
+  phone                  String?
+  message                String                    @db.Text
+  freeSiteVisit          Boolean?                  @default(false)
+  userId                 String?
+  status                 ContactSubmissionStatus   @default(NEW)
+  visitAddress           String?
+  proposedQuoteAmount    Decimal?
+  proposedQuoteDescription String?                 @db.Text
+  visitScheduledAt       DateTime?
+  quoteSentAt            DateTime?
+  adminNotes             String?                   @db.Text
+  createdAt              DateTime                  @default(now())
+
+  user                   User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([status])
 }
 
 // Loyalty & Rewards
@@ -1475,6 +1620,7 @@ model OrderNote {
   createdAt   DateTime  @default(now())
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  admin       User?     @relation("OrderNoteAdmin", fields: [adminId], references: [id])
 
   @@index([orderId])
 }
@@ -1494,18 +1640,58 @@ model ScheduledDelivery {
   @@index([scheduledDate])
 }
 
-model ShippingCarrier {
-  id          String    @id @default(cuid())
-  name        String
-  apiProvider String
-  config      Json
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+model LogisticsProvider {
+  id                  String                @id @default(cuid())
+  name                String
+  type                LogisticsProviderType @unique
+  isActive            Boolean               @default(false)
+  isDefault           Boolean               @default(false)
+  config              Json                  // API keys, credentials, endpoints
+  supportedRegions    String[]              @default([]) // ["IN", "US"]
+  supportedServices   String[]              @default([]) // ["express", "standard", "cod"]
+  webhookUrl          String?
+  webhookSecret       String?
+  priority            Int                   @default(0) // For provider selection
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
-  labels      ShippingLabel[]
+  shipments           LogisticsShipment[]
+  labels              ShippingLabel[]
 
+  @@index([type])
   @@index([isActive])
+  @@index([isActive, priority])
+}
+
+model LogisticsShipment {
+  id                  String    @id @default(cuid())
+  orderId             String
+  providerId          String
+  providerShipmentId  String?   // External provider's shipment ID
+  awbNumber           String?   // Airway Bill Number
+  trackingNumber      String?
+  status              String   // "created", "picked_up", "in_transit", "delivered", "failed"
+  providerStatus      String?  // Provider-specific status
+  rate                Decimal?  @db.Decimal(10, 2)
+  labelUrl            String?
+  manifestUrl         String?
+  pickupScheduled     Boolean  @default(false)
+  pickupDate          DateTime?
+  estimatedDelivery   DateTime?
+  actualDelivery      DateTime?
+  metadata            Json?     // Provider-specific data
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  order               Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider            LogisticsProvider @relation(fields: [providerId], references: [id])
+
+  @@index([orderId])
+  @@index([providerId])
+  @@index([trackingNumber])
+  @@index([awbNumber])
+  @@index([status])
+  @@unique([orderId, providerId])
 }
 
 model ShippingLabel {
@@ -1517,7 +1703,7 @@ model ShippingLabel {
   status        String
   createdAt     DateTime  @default(now())
 
-  carrier       ShippingCarrier @relation(fields: [carrierId], references: [id])
+  provider      LogisticsProvider? @relation(fields: [carrierId], references: [id])
 
   @@index([orderId])
   @@index([trackingNumber])
@@ -1833,8 +2019,10 @@ model ExportJob {
   id        String    @id @default(cuid())
   type      String
   filters   Json?
+  format    String?   // Export format: CSV, EXCEL, JSON
   status    JobStatus @default(PENDING)
   fileUrl   String?
+  createdBy String?   // User ID who created the export job
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -2087,6 +2275,7 @@ model Tenant {
   categories Category[]
   carts     Cart[]
   coupons   Coupon[]
+  services  Service[]
 
   @@index([domain])
   @@index([isActive])
@@ -2103,6 +2292,7 @@ model OrderStateHistory {
   createdAt DateTime  @default(now())
 
   order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id])
 
   @@index([orderId])
   @@index([createdAt])
@@ -2311,3 +2501,134 @@ model FeatureCategory {
   @@index([isActive])
 }
 
+model ApiDeprecation {
+  id              String            @id @default(cuid())
+  endpoint        String
+  version         String
+  replacement     String?
+  deprecationDate DateTime
+  sunsetDate      DateTime
+  status          DeprecationStatus @default(ANNOUNCED)
+  noticePeriod    Int               @default(90)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([endpoint])
+  @@index([version])
+  @@index([status])
+  @@index([deprecationDate])
+}
+
+model ApiVersion {
+  id              String           @id @default(cuid())
+  version         String           @unique
+  status          APIVersionStatus @default(CURRENT)
+  releaseDate     DateTime?
+  deprecationDate DateTime?
+  sunsetDate      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([version])
+  @@index([status])
+}
+
+model EmailService {
+  id          String           @id @default(cuid())
+  name        String
+  type        EmailServiceType @unique
+  isActive    Boolean          @default(false)
+  isDefault   Boolean          @default(false)
+  config      Json             // Provider-specific configuration
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model MailSettings {
+  id        String   @id @default(cuid())
+  config    Json     // triggers: { orderPlaced, orderShipped, invoiceCreated, invoiceSent }, details: { includeOrderSummary, includeInvoicePdf, includeShippingAddress }
+  updatedAt DateTime @updatedAt
+}
+
+model SMSService {
+  id          String          @id @default(cuid())
+  name        String
+  type        SMSServiceType  @unique
+  isActive    Boolean         @default(false)
+  isDefault   Boolean         @default(false)
+  config      Json            // Provider-specific configuration
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model APIUsage {
+  id          String    @id @default(cuid())
+  userId      String?
+  endpoint    String
+  method      String
+  responseTime Int?     // Response time in milliseconds
+  statusCode  Int
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([endpoint])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model LegalDocument {
+  id            String    @id @default(cuid())
+  type          String    // TERMS_OF_SERVICE, PRIVACY_POLICY, RETURN_POLICY, COOKIE_POLICY
+  content       String    @db.Text
+  version       String
+  isActive      Boolean   @default(true)
+  effectiveDate DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([type])
+  @@index([isActive])
+  @@index([type, isActive])
+}
+
+model UserAcceptance {
+  id              String    @id @default(cuid())
+  userId          String
+  documentType    String    // TERMS_OF_SERVICE, PRIVACY_POLICY, etc.
+  documentVersion String
+  acceptedAt      DateTime  @default(now())
+  ipAddress       String?
+  userAgent       String?
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([documentType])
+  @@index([userId, documentType])
+  @@unique([userId, documentType, documentVersion])
+}
+
+model TaxNexus {
+  id        String    @id @default(cuid())
+  country   String
+  state     String?
+  city      String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([country])
+  @@index([country, state])
+  @@index([isActive])
+  @@unique([country, state, city])
+}
