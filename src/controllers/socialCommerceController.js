@@ -66,25 +66,25 @@ const getUserGeneratedContent = asyncHandler(async (req, res) => {
 
   // TODO: Add UserGeneratedContent model to Prisma schema
   const content = []; // await prisma.userGeneratedContent.findMany({
-    where,
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          avatar: true,
-        },
-      },
-      product: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
+  //   where,
+  //   include: {
+  //     user: {
+  //       select: {
+  //         id: true,
+  //         name: true,
+  //         avatar: true,
+  //       },
+  //     },
+  //     product: {
+  //       select: {
+  //         id: true,
+  //         name: true,
+  //       },
+  //     },
+  //   },
+  //   orderBy: { createdAt: 'desc' },
+  //   take: 50,
+  // });
 
   res.json({
     success: true,
