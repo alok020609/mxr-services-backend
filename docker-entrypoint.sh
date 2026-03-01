@@ -25,7 +25,7 @@ warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-# Wait for database to be ready
+# Wait for database to be ready (best-effort; migrations will fail if DB is unreachable)
 wait_for_db() {
     log "Waiting for database to be ready..."
     
@@ -57,7 +57,9 @@ wait_for_db() {
         sleep 2
     done
     
-    error "Database did not become ready after $MAX_ATTEMPTS attempts"
+    # On Render/Docker, nc may not reach internal DB; continue and let Prisma migrate fail with a clear error if DB is down
+    warning "Database connection check timed out. Continuing anyway (migrations will fail if DB is unreachable)."
+    return 0
 }
 
 # Run Prisma migrations
