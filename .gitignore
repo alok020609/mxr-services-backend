@@ -3,10 +3,21 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# Environment variables
+# Environment and secrets (never commit)
 .env
 .env.local
+.env.development
+.env.production
+.env.staging
+.env.test
 .env.*.local
+# Keep .env.example tracked (do not add it here)
+
+# Secret / key files
+*.pem
+secrets.json
+credentials.json
+.env.secrets
 
 # Logs
 logs/
