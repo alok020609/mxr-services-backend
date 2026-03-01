@@ -18,7 +18,7 @@ services:
       - key: REDIS_URL
         fromService:
           name: ecommerce-redis
-          type: redis
+          type: keyvalue
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
@@ -49,12 +49,15 @@ services:
       - key: RAZORPAY_KEY_SECRET
         sync: false
 
+  - type: keyvalue
+    name: ecommerce-redis
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
+    plan: starter
+
 databases:
   - name: ecommerce-db
     databaseName: ecommerce
     user: ecommerce_user
-    plan: starter
-
-redis:
-  - name: ecommerce-redis
     plan: starter
