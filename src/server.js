@@ -13,6 +13,16 @@ const { requestLogger, performanceMonitor } = require('./middleware/monitoring')
 const { etagMiddleware } = require('./middleware/etag');
 const { attachDataLoaders } = require('./utils/dataloader');
 
+// Optional admin routes: load only if present (e.g. some files may be untracked in repo)
+function requireOptional(path) {
+  try {
+    return require(path);
+  } catch (e) {
+    if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    return null;
+  }
+}
+
 const app = express();
 
 // Security middleware
@@ -188,15 +198,15 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const adminRoutes = require('./routes/admin/adminRoutes');
-const adminPaymentGatewayRoutes = require('./routes/admin/adminPaymentGatewayRoutes');
-const adminEmailServiceRoutes = require('./routes/admin/adminEmailServiceRoutes');
-const adminSMSServiceRoutes = require('./routes/admin/adminSMSServiceRoutes');
-const adminLogisticsProviderRoutes = require('./routes/admin/adminLogisticsProviderRoutes');
-const adminQuestionRoutes = require('./routes/admin/adminQuestionRoutes');
-const adminCurrencyRoutes = require('./routes/admin/adminCurrencyRoutes');
-const adminMailSettingsRoutes = require('./routes/admin/adminMailSettingsRoutes');
-const adminInvoiceRoutes = require('./routes/admin/adminInvoiceRoutes');
-const adminContactSubmissionRoutes = require('./routes/admin/adminContactSubmissionRoutes');
+const adminPaymentGatewayRoutes = requireOptional('./routes/admin/adminPaymentGatewayRoutes');
+const adminEmailServiceRoutes = requireOptional('./routes/admin/adminEmailServiceRoutes');
+const adminSMSServiceRoutes = requireOptional('./routes/admin/adminSMSServiceRoutes');
+const adminLogisticsProviderRoutes = requireOptional('./routes/admin/adminLogisticsProviderRoutes');
+const adminQuestionRoutes = requireOptional('./routes/admin/adminQuestionRoutes');
+const adminCurrencyRoutes = requireOptional('./routes/admin/adminCurrencyRoutes');
+const adminMailSettingsRoutes = requireOptional('./routes/admin/adminMailSettingsRoutes');
+const adminInvoiceRoutes = requireOptional('./routes/admin/adminInvoiceRoutes');
+const adminContactSubmissionRoutes = requireOptional('./routes/admin/adminContactSubmissionRoutes');
 const logisticsRoutes = require('./routes/logisticsRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const languageRoutes = require('./routes/languageRoutes');
@@ -241,7 +251,7 @@ const multiTenantRoutes = require('./routes/multiTenantRoutes');
 const migrationRoutes = require('./routes/migrationRoutes');
 const disasterRecoveryRoutes = require('./routes/disasterRecoveryRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
-const adminServiceRoutes = require('./routes/admin/adminServiceRoutes');
+const adminServiceRoutes = requireOptional('./routes/admin/adminServiceRoutes');
 const apiVersion = process.env.API_VERSION || 'v1';
 app.use(`/api/${apiVersion}/auth`, authRoutes);
 app.use(`/api/${apiVersion}/products`, productRoutes);
@@ -258,16 +268,16 @@ app.use(`/api/${apiVersion}/notifications`, notificationRoutes);
 app.use(`/api/${apiVersion}/inventory`, inventoryRoutes);
 app.use(`/api/${apiVersion}/reviews`, reviewRoutes);
 app.use(`/api/${apiVersion}/admin`, adminRoutes);
-app.use(`/api/${apiVersion}/admin/payment-gateways`, adminPaymentGatewayRoutes);
-app.use(`/api/${apiVersion}/admin/email-services`, adminEmailServiceRoutes);
-app.use(`/api/${apiVersion}/admin/sms-services`, adminSMSServiceRoutes);
-app.use(`/api/${apiVersion}/admin/logistics-providers`, adminLogisticsProviderRoutes);
-app.use(`/api/${apiVersion}/admin/questions`, adminQuestionRoutes);
-app.use(`/api/${apiVersion}/admin/currencies`, adminCurrencyRoutes);
-app.use(`/api/${apiVersion}/admin/mail-settings`, adminMailSettingsRoutes);
-app.use(`/api/${apiVersion}/admin/invoices`, adminInvoiceRoutes);
-app.use(`/api/${apiVersion}/admin/contact-submissions`, adminContactSubmissionRoutes);
-app.use(`/api/${apiVersion}/admin/services`, adminServiceRoutes);
+if (adminPaymentGatewayRoutes) app.use(`/api/${apiVersion}/admin/payment-gateways`, adminPaymentGatewayRoutes);
+if (adminEmailServiceRoutes) app.use(`/api/${apiVersion}/admin/email-services`, adminEmailServiceRoutes);
+if (adminSMSServiceRoutes) app.use(`/api/${apiVersion}/admin/sms-services`, adminSMSServiceRoutes);
+if (adminLogisticsProviderRoutes) app.use(`/api/${apiVersion}/admin/logistics-providers`, adminLogisticsProviderRoutes);
+if (adminQuestionRoutes) app.use(`/api/${apiVersion}/admin/questions`, adminQuestionRoutes);
+if (adminCurrencyRoutes) app.use(`/api/${apiVersion}/admin/currencies`, adminCurrencyRoutes);
+if (adminMailSettingsRoutes) app.use(`/api/${apiVersion}/admin/mail-settings`, adminMailSettingsRoutes);
+if (adminInvoiceRoutes) app.use(`/api/${apiVersion}/admin/invoices`, adminInvoiceRoutes);
+if (adminContactSubmissionRoutes) app.use(`/api/${apiVersion}/admin/contact-submissions`, adminContactSubmissionRoutes);
+if (adminServiceRoutes) app.use(`/api/${apiVersion}/admin/services`, adminServiceRoutes);
 app.use(`/api/${apiVersion}/logistics`, logisticsRoutes);
 app.use(`/api/${apiVersion}/currencies`, currencyRoutes);
 app.use(`/api/${apiVersion}/languages`, languageRoutes);
