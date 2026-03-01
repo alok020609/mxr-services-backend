@@ -271,7 +271,7 @@ model Category {
   parent      Category? @relation("CategoryTree", fields: [parentId], references: [id])
   children    Category[] @relation("CategoryTree")
   products    Product[]
-  translations Translation[]
+  translations Translation[] @relation("TranslationCategory")
   tenant      Tenant?   @relation(fields: [tenantId], references: [id])
 
   @@index([slug])
@@ -324,7 +324,7 @@ model Product {
   waitlist          Waitlist[]
   productAlerts     ProductAlert[]
   stockNotifications StockNotification[]
-  translations      Translation[]
+  translations      Translation[] @relation("TranslationProduct")
   vendorProducts    VendorProduct[]
   warehouseStocks   WarehouseStock[]
   tenant            Tenant?  @relation(fields: [tenantId], references: [id])
@@ -908,8 +908,8 @@ model Translation {
   updatedAt  DateTime @updatedAt
 
   language   Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
-  category   Category? @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  product    Product?  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category   Category? @relation("TranslationCategory", fields: [entityId], references: [id], onDelete: Cascade, map: "Translation_category_entityId_fkey")
+  product    Product?  @relation("TranslationProduct", fields: [entityId], references: [id], onDelete: Cascade, map: "Translation_product_entityId_fkey")
 
   @@unique([entityType, entityId, languageId, field])
   @@index([entityType, entityId])
@@ -1742,7 +1742,7 @@ model APIKey {
   lastUsedAt DateTime?
   createdAt   DateTime  @default(now())
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([key])
   @@index([userId])
@@ -2221,6 +2221,7 @@ model FeatureFlag {
   rules             FeatureFlagRule[]
   evaluations       FeatureFlagEvaluation[]
   overrides         FeatureFlagOverride[]
+  categoryRelation  FeatureCategory? @relation("FeatureFlagCategory", fields: [category], references: [name], onDelete: SetNull)
 
   @@index([key])
   @@index([isEnabled])
@@ -2269,6 +2270,8 @@ model FeatureFlagEvaluation {
   metadata    Json?
   evaluatedAt DateTime  @default(now())
 
+  flag        FeatureFlag @relation(fields: [flagKey], references: [key], onDelete: Cascade)
+
   @@index([flagKey])
   @@index([userId])
   @@index([evaluatedAt])
@@ -2302,7 +2305,7 @@ model FeatureCategory {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  flags       FeatureFlag[]
+  flags       FeatureFlag[] @relation("FeatureFlagCategory")
 
   @@index([name])
   @@index([isActive])
