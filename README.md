@@ -2216,6 +2216,9 @@ docker-compose down
 ### Pre-deploy validation
 Before pushing (e.g. to trigger a Render deploy), run `npm run validate:deploy` to build the Docker image and verify the app loads without MODULE_NOT_FOUND or syntax errors. Optionally use `npm run validate:load` (no Docker) to test with tracked files only.
 
+### Custom domain (Render)
+To use your own domain (e.g. `app.example.com`): in Render add it under **Settings → Custom Domains**, then at your DNS provider create a CNAME record pointing the host to the Render service hostname Render shows. Allow time for DNS propagation.
+
 ## Development
 
 ### Run migrations

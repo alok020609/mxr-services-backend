@@ -184,6 +184,17 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root: avoid 404 and point visitors to docs and API
+app.get('/', (req, res) => {
+  const apiVersion = process.env.API_VERSION || 'v1';
+  res.status(200).json({
+    name: 'E-commerce Backend API',
+    docs: '/api-docs',
+    health: '/health',
+    api: `/api/${apiVersion}`,
+  });
+});
+
 // API routes
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
