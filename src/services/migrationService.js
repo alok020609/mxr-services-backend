@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 const { FeatureFlagService } = require('./featureFlagService');
 
 class MigrationService {

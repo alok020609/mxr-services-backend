@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 // Tenant context middleware
 const tenantContext = async (req, res, next) => {

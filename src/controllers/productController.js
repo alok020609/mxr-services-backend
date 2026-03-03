@@ -49,14 +49,21 @@ const getProducts = asyncHandler(async (req, res) => {
     prisma.product.count({ where }),
   ]);
 
+  // Ensure total is always a number
+  const totalCount = total || 0;
+  const pageNum = parseInt(page) || 1;
+  const limitNum = parseInt(limit) || 20;
+  const totalPages = Math.ceil(totalCount / limitNum);
+
   res.json({
     success: true,
     data: products,
     pagination: {
-      page: parseInt(page),
-      limit: parseInt(limit),
-      total,
-      pages: Math.ceil(total / parseInt(limit)),
+      page: pageNum,
+      limit: limitNum,
+      total: totalCount,
+      pages: totalPages,
+      totalPages: totalPages, // Alias for backward compatibility
     },
   });
 });
@@ -130,13 +137,26 @@ const createProduct = asyncHandler(async (req, res) => {
     slug,
     price,
     compareAtPrice,
+    originalPrice,
     sku,
+    stock,
     images,
     categoryId,
     badges,
     specifications,
     certifications,
     warrantyInfo,
+    returnPolicy,
+    refundPolicy,
+    shippingPolicy,
+    exchangePolicy,
+    cancellationPolicy,
+    careInstructions,
+    countryOfOrigin,
+    manufacturerInfo,
+    brand,
+    modelNumber,
+    weightDimensions,
     minOrderQuantity,
     maxOrderQuantity,
   } = req.body;
@@ -148,13 +168,26 @@ const createProduct = asyncHandler(async (req, res) => {
       slug: slug || name.toLowerCase().replace(/\s+/g, '-'),
       price,
       compareAtPrice,
+      originalPrice,
       sku,
+      stock: stock !== undefined ? stock : 0,
       images: images || [],
       categoryId,
       badges: badges || [],
       specifications: specifications || {},
       certifications: certifications || [],
       warrantyInfo,
+      returnPolicy: returnPolicy ? (typeof returnPolicy === 'string' ? JSON.parse(returnPolicy) : returnPolicy) : null,
+      refundPolicy: refundPolicy ? (typeof refundPolicy === 'string' ? JSON.parse(refundPolicy) : refundPolicy) : null,
+      shippingPolicy: shippingPolicy ? (typeof shippingPolicy === 'string' ? JSON.parse(shippingPolicy) : shippingPolicy) : null,
+      exchangePolicy: exchangePolicy ? (typeof exchangePolicy === 'string' ? JSON.parse(exchangePolicy) : exchangePolicy) : null,
+      cancellationPolicy: cancellationPolicy ? (typeof cancellationPolicy === 'string' ? JSON.parse(cancellationPolicy) : cancellationPolicy) : null,
+      careInstructions,
+      countryOfOrigin,
+      manufacturerInfo: manufacturerInfo ? (typeof manufacturerInfo === 'string' ? JSON.parse(manufacturerInfo) : manufacturerInfo) : null,
+      brand,
+      modelNumber,
+      weightDimensions: weightDimensions ? (typeof weightDimensions === 'string' ? JSON.parse(weightDimensions) : weightDimensions) : null,
       minOrderQuantity: minOrderQuantity || 1,
       maxOrderQuantity,
       isActive: true,
@@ -164,35 +197,88 @@ const createProduct = asyncHandler(async (req, res) => {
     },
   });
 
-  // Create inventory record
+  // Create inventory record (sync with product stock)
+  const initialStock = stock !== undefined ? stock : 0;
   await prisma.inventory.create({
     data: {
       productId: product.id,
-      stock: 0,
+      stock: initialStock,
       reserved: 0,
       lowStockThreshold: 10,
     },
   });
 
+  // Fetch product with inventory for response
+  const productWithInventory = await prisma.product.findUnique({
+    where: { id: product.id },
+    include: {
+      category: true,
+      inventory: true,
+    },
+  });
+
   res.status(201).json({
     success: true,
-    data: product,
+    data: productWithInventory,
   });
 });
 
 const updateProduct = asyncHandler(async (req, res) => {
+  const { stock, ...otherData } = req.body;
+  
+  // Update product
+  const updateData = { ...otherData };
+  if (stock !== undefined) {
+    updateData.stock = stock;
+  }
+  
   const product = await prisma.product.update({
     where: { id: req.params.id },
-    data: req.body,
+    data: updateData,
     include: {
       category: true,
       variants: true,
+      inventory: true,
+    },
+  });
+
+  // Sync stock with Inventory table if stock was updated
+  if (stock !== undefined) {
+    const inventory = await prisma.inventory.findUnique({
+      where: { productId: req.params.id },
+    });
+
+    if (inventory) {
+      await prisma.inventory.update({
+        where: { productId: req.params.id },
+        data: { stock },
+      });
+    } else {
+      // Create inventory record if it doesn't exist
+      await prisma.inventory.create({
+        data: {
+          productId: req.params.id,
+          stock,
+          reserved: 0,
+          lowStockThreshold: 10,
+        },
+      });
+    }
+  }
+
+  // Fetch updated product with inventory
+  const updatedProduct = await prisma.product.findUnique({
+    where: { id: req.params.id },
+    include: {
+      category: true,
+      variants: true,
+      inventory: true,
     },
   });
 
   res.json({
     success: true,
-    data: product,
+    data: updatedProduct,
   });
 });
 

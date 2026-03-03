@@ -1,6 +1,6 @@
 const prisma = require('../config/database');
 const { cache } = require('../config/redis');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class PerformanceService {
   // Query optimization - Get products with optimized query

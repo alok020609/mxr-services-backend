@@ -1,6 +1,9 @@
 const prisma = require('../../config/database');
 const StripeGateway = require('./StripeGateway');
 const RazorpayGateway = require('./RazorpayGateway');
+const PayUGateway = require('./PayUGateway');
+
+const COMING_SOON_TYPES = ['STRIPE', 'RAZORPAY', 'PAYPAL', 'UPI', 'PHONEPE', 'GPAY', 'PAYTM', 'CRYPTO', 'BANK_TRANSFER', 'COD'];
 
 class PaymentGatewayFactory {
   static async createGateway(gatewayType) {
@@ -12,34 +15,34 @@ class PaymentGatewayFactory {
       throw new Error(`Payment gateway ${gatewayType} is not available`);
     }
 
-    const config = gatewayConfig.config;
+    if (gatewayType === 'PAYU') {
+      const config = gatewayConfig.config;
+      return new PayUGateway({
+        key: config.key,
+        salt: config.salt,
+        environment: config.environment || 'test',
+        successRedirectUrl: config.successRedirectUrl || null,
+        failureRedirectUrl: config.failureRedirectUrl || null,
+      });
+    }
 
+    if (COMING_SOON_TYPES.includes(gatewayType)) {
+      throw new Error(`Payment gateway ${gatewayType} is coming soon`);
+    }
+
+    const config = gatewayConfig.config;
     switch (gatewayType) {
       case 'STRIPE':
         return new StripeGateway({
           secretKey: config.secretKey,
           webhookSecret: gatewayConfig.webhookSecret,
         });
-
       case 'RAZORPAY':
         return new RazorpayGateway({
           keyId: config.keyId,
           keySecret: config.keySecret,
           webhookSecret: gatewayConfig.webhookSecret,
         });
-
-      case 'PAYU':
-        // TODO: Implement PayU gateway
-        throw new Error('PayU gateway not yet implemented');
-
-      case 'PAYPAL':
-        // TODO: Implement PayPal gateway
-        throw new Error('PayPal gateway not yet implemented');
-
-      case 'UPI':
-        // TODO: Implement UPI gateway
-        throw new Error('UPI gateway not yet implemented');
-
       default:
         throw new Error(`Unsupported payment gateway: ${gatewayType}`);
     }
@@ -57,7 +60,10 @@ class PaymentGatewayFactory {
       },
     });
 
-    return gateways;
+    return gateways.map((g) => ({
+      ...g,
+      integrationStatus: g.type === 'PAYU' ? 'available' : 'coming_soon',
+    }));
   }
 }
 

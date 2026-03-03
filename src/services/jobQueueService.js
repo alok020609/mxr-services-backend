@@ -1,5 +1,5 @@
 const Queue = require('bull');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 // Create job queues
 const emailQueue = new Queue('email', {

@@ -12,6 +12,25 @@ const sendSMS = asyncHandler(async (req, res) => {
   });
 });
 
+const sendEmail = asyncHandler(async (req, res) => {
+  const { to, subject, text, html, cc, bcc, attachments } = req.body;
+
+  const result = await IntegrationsService.sendEmail({
+    to,
+    subject,
+    text,
+    html,
+    cc,
+    bcc,
+    attachments,
+  });
+
+  res.json({
+    success: true,
+    data: result,
+  });
+});
+
 const addToMarketingList = asyncHandler(async (req, res) => {
   const { email, listId, tags } = req.body;
 
@@ -102,6 +121,7 @@ const triggerWebhook = asyncHandler(async (req, res) => {
 
 module.exports = {
   sendSMS,
+  sendEmail,
   addToMarketingList,
   trackAnalyticsEvent,
   syncToCRM,

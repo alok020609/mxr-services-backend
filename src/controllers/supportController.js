@@ -1,5 +1,7 @@
 const prisma = require('../config/database');
 const { asyncHandler } = require('../utils/asyncHandler');
+const mailSettingsService = require('../services/mailSettingsService');
+const { sendContactSubmissionNotification } = require('../utils/email');
 
 const createTicket = asyncHandler(async (req, res) => {
   const { subject, message } = req.body;
@@ -182,6 +184,45 @@ const getFAQs = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * Public contact form submission. No auth required; if Bearer token present and valid, link to user.
+ */
+const submitContact = asyncHandler(async (req, res) => {
+  const { name, email, message, phone, freeSiteVisit } = req.body;
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ success: false, error: 'Name is required' });
+  }
+  if (!email || typeof email !== 'string' || !email.trim()) {
+    return res.status(400).json({ success: false, error: 'Email is required' });
+  }
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
+  }
+  const submission = await prisma.contactSubmission.create({
+    data: {
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+      phone: phone != null && typeof phone === 'string' ? phone.trim() || null : null,
+      freeSiteVisit: freeSiteVisit === true || freeSiteVisit === 'true',
+      userId: req.user?.id ?? null,
+      status: 'NEW',
+    },
+  });
+  const toNotify = await mailSettingsService.getMailSettings()
+    .then((s) => s.config?.contactNotificationEmail)
+    .catch(() => null);
+  const recipient = (toNotify && typeof toNotify === 'string' && toNotify.trim()) ? toNotify.trim() : (process.env.CONTACT_NOTIFICATION_EMAIL || process.env.SMTP_USER || '').trim();
+  if (recipient) {
+    sendContactSubmissionNotification(recipient, submission).catch(() => {});
+  }
+  res.status(201).json({
+    success: true,
+    data: { id: submission.id, createdAt: submission.createdAt },
+    message: 'Contact submission received',
+  });
+});
+
 module.exports = {
   createTicket,
   getTickets,
@@ -189,6 +230,7 @@ module.exports = {
   addMessage,
   closeTicket,
   getFAQs,
+  submitContact,
 };
 
 

@@ -1,9 +1,10 @@
+const prisma = require('../config/database');
 const { OrderStateMachine, ORDER_STATES } = require('../services/orderStateMachine');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 const transitionOrder = asyncHandler(async (req, res) => {
   const { orderId } = req.params;
-  const { newState, metadata } = req.body;
+  const { newState, metadata: bodyMetadata } = req.body;
 
   if (!Object.values(ORDER_STATES).includes(newState)) {
     return res.status(400).json({
@@ -12,6 +13,7 @@ const transitionOrder = asyncHandler(async (req, res) => {
     });
   }
 
+  const metadata = { ...(bodyMetadata || {}), userId: req.user?.id };
   const order = await OrderStateMachine.transition(orderId, newState, metadata);
 
   res.json({
@@ -50,6 +52,7 @@ const getAvailableTransitions = asyncHandler(async (req, res) => {
 
   const order = await prisma.order.findUnique({
     where: { id: orderId },
+    include: { payments: true, logisticsShipments: true },
   });
 
   if (!order) {
@@ -59,13 +62,14 @@ const getAvailableTransitions = asyncHandler(async (req, res) => {
     });
   }
 
-  const availableTransitions = STATE_TRANSITIONS[order.status] || [];
+  const { availableTransitions, context } = await OrderStateMachine.getAvailableTransitions(order);
 
   res.json({
     success: true,
     data: {
       currentState: order.status,
       availableTransitions,
+      context,
     },
   });
 });

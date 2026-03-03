@@ -1,5 +1,6 @@
 const authService = require('../services/authService');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { sendVerificationEmail } = require('../utils/email');
 
 const register = asyncHandler(async (req, res) => {
   const user = await authService.register(req.body);
@@ -20,6 +21,28 @@ const login = asyncHandler(async (req, res) => {
   });
 });
 
+const loginWithGoogle = asyncHandler(async (req, res) => {
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent');
+  const idToken = req.body.idToken || req.body.id_token;
+  const result = await authService.loginWithGoogle(idToken, ipAddress, userAgent);
+  res.json({
+    success: true,
+    data: result,
+  });
+});
+
+const loginWithMicrosoft = asyncHandler(async (req, res) => {
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent');
+  const idToken = req.body.idToken || req.body.id_token;
+  const result = await authService.loginWithMicrosoft(idToken, ipAddress, userAgent);
+  res.json({
+    success: true,
+    data: result,
+  });
+});
+
 const verifyEmail = asyncHandler(async (req, res) => {
   const result = await authService.verifyEmail(req.params.token);
   res.json({
@@ -29,10 +52,10 @@ const verifyEmail = asyncHandler(async (req, res) => {
 });
 
 const resendVerification = asyncHandler(async (req, res) => {
-  // TODO: Implement resend verification
+  const result = await authService.resendVerificationEmail(req.body.email);
   res.json({
     success: true,
-    message: 'Verification email sent',
+    message: result.message,
   });
 });
 
@@ -96,14 +119,43 @@ const getProfile = asyncHandler(async (req, res) => {
 
 const updateProfile = asyncHandler(async (req, res) => {
   const prisma = require('../config/database');
-  const { firstName, lastName, phone } = req.body;
+  const { firstName, lastName, phone, email } = req.body;
+  
+  // Build update data object with only provided fields
+  const updateData = {};
+  if (firstName !== undefined) updateData.firstName = firstName;
+  if (lastName !== undefined) updateData.lastName = lastName;
+  if (phone !== undefined) updateData.phone = phone;
+  
+  // Handle email update - if email is changed, require verification
+  if (email !== undefined && email !== req.user.email) {
+    // Check if email is already taken
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+    
+    if (existingUser && existingUser.id !== req.user.id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email already in use',
+      });
+    }
+    
+    updateData.email = email;
+    updateData.emailVerified = false; // Require verification for new email
+    
+    // Generate new verification token for the new email
+    const crypto = require('crypto');
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    updateData.verificationToken = verificationToken;
+    
+    // Send verification email to new address (after user is updated)
+    // We'll send it after the update completes
+  }
+  
   const user = await prisma.user.update({
     where: { id: req.user.id },
-    data: {
-      firstName,
-      lastName,
-      phone,
-    },
+    data: updateData,
     select: {
       id: true,
       email: true,
@@ -112,11 +164,24 @@ const updateProfile = asyncHandler(async (req, res) => {
       phone: true,
       emailVerified: true,
       role: true,
+      verificationToken: true,
     },
   });
+  
+  // Send verification email if email was changed
+  if (email && email !== req.user.email && user.verificationToken) {
+    await sendVerificationEmail(user.email, user.verificationToken, user.firstName || '');
+  }
+  
+  // Remove verificationToken from response for security
+  const { verificationToken, ...userResponse } = user;
+  
   res.json({
     success: true,
-    data: user,
+    message: email && email !== req.user.email 
+      ? 'Profile updated. Please verify your new email address.'
+      : 'Profile updated successfully',
+    data: userResponse,
   });
 });
 

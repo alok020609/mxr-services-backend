@@ -1,13 +1,43 @@
 const prisma = require('../config/database');
 const { asyncHandler } = require('../utils/asyncHandler');
 const crypto = require('crypto');
+const logger = require('../utils/logger');
+const mailSettingsService = require('../services/mailSettingsService');
+const orderConfirmationEmailService = require('../services/orderConfirmationEmailService');
 
 const generateOrderNumber = () => {
   return `ORD-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 };
 
+// Map request paymentMethod string to Prisma PaymentGatewayType enum
+const PAYMENT_METHOD_TO_GATEWAY = {
+  cod: 'COD',
+  cash_on_delivery: 'COD',
+  stripe: 'STRIPE',
+  razorpay: 'RAZORPAY',
+  paypal: 'PAYPAL',
+  upi: 'UPI',
+  phonepe: 'PHONEPE',
+  gpay: 'GPAY',
+  paytm: 'PAYTM',
+  payu: 'PAYU',
+  bank_transfer: 'BANK_TRANSFER',
+  crypto: 'CRYPTO',
+};
+const VALID_GATEWAYS = ['STRIPE', 'PAYU', 'PAYPAL', 'UPI', 'RAZORPAY', 'CRYPTO', 'BANK_TRANSFER', 'COD', 'PHONEPE', 'GPAY', 'PAYTM'];
+
+function resolvePaymentGateway(paymentMethod) {
+  if (!paymentMethod || typeof paymentMethod !== 'string') return 'COD';
+  const normalized = paymentMethod.trim().toLowerCase().replace(/-/g, '_');
+  if (PAYMENT_METHOD_TO_GATEWAY[normalized]) return PAYMENT_METHOD_TO_GATEWAY[normalized];
+  const upper = paymentMethod.trim().toUpperCase();
+  if (VALID_GATEWAYS.includes(upper)) return upper;
+  return 'COD';
+}
+
 const createOrder = asyncHandler(async (req, res) => {
-  const { shippingAddressId, billingAddressId, couponCode } = req.body;
+  const { shippingAddressId, billingAddressId, couponCode, paymentMethod: paymentMethodRaw } = req.body;
+  const gateway = resolvePaymentGateway(paymentMethodRaw);
 
   // Get cart
   const cart = await prisma.cart.findUnique({
@@ -51,6 +81,17 @@ const createOrder = asyncHandler(async (req, res) => {
       success: false,
       error: 'Invalid address',
     });
+  }
+
+  // Stock check: ensure every cart item has sufficient stock
+  for (const item of cart.items) {
+    const available = item.variant != null ? item.variant.stock : item.product.stock;
+    if (available < item.quantity) {
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient stock for one or more items',
+      });
+    }
   }
 
   // Calculate totals
@@ -101,71 +142,115 @@ const createOrder = asyncHandler(async (req, res) => {
   const shipping = 0; // TODO: Calculate shipping
   const total = subtotal + tax + shipping - discount;
 
-  // Create order
-  const order = await prisma.order.create({
-    data: {
-      userId: req.user.id,
-      orderNumber: generateOrderNumber(),
-      status: 'CREATED',
-      total,
-      subtotal,
-      tax,
-      shipping,
-      discount,
-      currency: 'USD',
-      shippingAddress: {
-        street: shippingAddress.street,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        zipCode: shippingAddress.zipCode,
-        country: shippingAddress.country,
-      },
-      billingAddress: {
-        street: billingAddress.street,
-        city: billingAddress.city,
-        state: billingAddress.state,
-        zipCode: billingAddress.zipCode,
-        country: billingAddress.country,
-      },
-      ipAddress: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('user-agent'),
-      items: {
-        create: orderItems,
-      },
-      ...(couponId && {
-        coupons: {
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.order.create({
+      data: {
+        userId: req.user.id,
+        orderNumber: generateOrderNumber(),
+        status: 'CREATED',
+        total,
+        subtotal,
+        tax,
+        shipping,
+        discount,
+        currency: 'USD',
+        shippingAddress: {
+          street: shippingAddress.street,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          zipCode: shippingAddress.zipCode,
+          country: shippingAddress.country,
+        },
+        billingAddress: {
+          street: billingAddress.street,
+          city: billingAddress.city,
+          state: billingAddress.state,
+          zipCode: billingAddress.zipCode,
+          country: billingAddress.country,
+        },
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get('user-agent'),
+        items: {
+          create: orderItems,
+        },
+        payments: {
           create: {
-            couponId,
-            userId: req.user.id,
-            discountAmount: discount,
+            gateway,
+            amount: Number(total),
+            currency: 'USD',
+            status: 'PENDING',
+            paymentMethod: paymentMethodRaw && typeof paymentMethodRaw === 'string' ? paymentMethodRaw.trim() : null,
           },
         },
-      }),
-    },
-    include: {
-      items: {
-        include: {
-          product: true,
-          variant: true,
-        },
+        ...(couponId && {
+          coupons: {
+            create: {
+              couponId,
+              userId: req.user.id,
+              discountAmount: discount,
+            },
+          },
+        }),
       },
-    },
+      include: {
+        items: {
+          include: {
+            product: true,
+            variant: true,
+          },
+        },
+        payments: true,
+      },
+    });
+
+    for (const item of cart.items) {
+      const qty = item.quantity;
+      if (item.variantId) {
+        await tx.productVariant.update({
+          where: { id: item.variantId },
+          data: { stock: { decrement: qty } },
+        });
+      } else {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: qty } },
+        });
+        const inv = await tx.inventory.findUnique({
+          where: { productId: item.productId },
+        });
+        if (inv) {
+          await tx.inventory.update({
+            where: { id: inv.id },
+            data: { stock: { decrement: qty } },
+          });
+        }
+      }
+    }
+
+    await tx.cartItem.deleteMany({
+      where: { cartId: cart.id },
+    });
+
+    await tx.orderStateHistory.create({
+      data: {
+        orderId: created.id,
+        fromState: 'CREATED',
+        toState: 'CREATED',
+        userId: req.user.id,
+      },
+    });
+
+    return created;
   });
 
-  // Clear cart
-  await prisma.cartItem.deleteMany({
-    where: { cartId: cart.id },
-  });
-
-  // Record state history
-  await prisma.orderStateHistory.create({
-    data: {
-      orderId: order.id,
-      fromState: 'CREATED',
-      toState: 'CREATED',
-      userId: req.user.id,
-    },
-  });
+  // Order confirmation email if enabled in mail settings (fire-and-forget)
+  mailSettingsService.getMailSettings().then((settings) => {
+    if (settings.config?.triggers?.orderPlaced) {
+      orderConfirmationEmailService.sendOrderConfirmationEmail(order.id).catch((err) => {
+        logger.error('Order confirmation email failed', { orderId: order.id, error: err.message });
+      });
+    }
+  }).catch(() => {});
 
   res.status(201).json({
     success: true,
@@ -206,6 +291,10 @@ const getOrders = asyncHandler(async (req, res) => {
             id: true,
             status: true,
             amount: true,
+            gateway: true,
+            paymentMethod: true,
+            currency: true,
+            createdAt: true,
           },
         },
       },
@@ -248,6 +337,11 @@ const getOrder = asyncHandler(async (req, res) => {
       notes: true,
       stateHistory: {
         orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
+        },
       },
     },
   });

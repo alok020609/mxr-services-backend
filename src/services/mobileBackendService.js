@@ -1,6 +1,6 @@
 const prisma = require('../config/database');
 const admin = require('firebase-admin');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 // Initialize Firebase Admin (for FCM)
 let firebaseInitialized = false;

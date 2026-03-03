@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class OutboxService {
   static async publishEvent(eventType, payload, aggregateId, aggregateType) {

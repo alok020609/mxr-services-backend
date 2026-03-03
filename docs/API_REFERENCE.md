@@ -26,6 +26,7 @@ Authorization: Bearer <jwt_token>
 11. [Tax](#tax)
 12. [Notifications](#notifications)
 13. [Admin](#admin)
+14. [Admin Logistics Provider Management](#admin-logistics-provider-management)
 14. [Search](#search)
 15. [Analytics](#analytics)
 16. [Support](#support)
@@ -48,36 +49,79 @@ Authorization: Bearer <jwt_token>
 ## Authentication & User Management
 
 ### POST /auth/register
-Register a new user account.
+Register a new user account. Set `isAdmin` to `true` to create an admin user.
 
 **Request Body:**
 ```json
 {
   "email": "user@example.com",
   "password": "SecurePassword123!",
-  "name": "John Doe",
-  "phone": "+1234567890"
+  "firstName": "John",
+  "lastName": "Doe",
+  "phone": "+1234567890",
+  "isAdmin": false
 }
 ```
+
+**Request Body Fields:**
+- `email` (string, required): User's email address
+- `password` (string, required, min: 6): User's password
+- `firstName` (string, optional): User's first name
+- `lastName` (string, optional): User's last name
+- `phone` (string, optional): User's phone number
+- `isAdmin` (boolean, optional, default: false): Set to `true` to create an admin user. Defaults to `false` (regular user).
 
 **Response (201 Created):**
 ```json
 {
-  "user": {
+  "success": true,
+  "data": {
     "id": "user-123",
     "email": "user@example.com",
-    "name": "John Doe",
-    "role": "CUSTOMER",
-    "emailVerified": false,
-    "createdAt": "2024-01-01T00:00:00Z"
+    "firstName": "John",
+    "lastName": "Doe",
+    "role": "USER",
+    "emailVerified": false
   },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "message": "Registration successful. Please verify your email."
 }
 ```
 
 **Error Responses:**
-- `400 Bad Request`: Invalid input, email already exists
-- `422 Unprocessable Entity`: Validation errors
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    },
+    {
+      "field": "password",
+      "message": "\"password\" length must be at least 6 characters long"
+    }
+  ]
+}
+```
+
+**400 Bad Request** - User already exists
+```json
+{
+  "success": false,
+  "error": "User already exists"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
 
 ---
 
@@ -107,7 +151,48 @@ Authenticate user and get access token.
 ```
 
 **Error Responses:**
-- `401 Unauthorized`: Invalid credentials
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    },
+    {
+      "field": "password",
+      "message": "\"password\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid credentials
+```json
+{
+  "success": false,
+  "error": "Invalid credentials"
+}
+```
+
+**401 Unauthorized** - Account inactive
+```json
+{
+  "success": false,
+  "error": "Account is inactive"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
 
 ---
 
@@ -124,8 +209,42 @@ Refresh access token using refresh token.
 **Response (200 OK):**
 ```json
 {
-  "token": "new_access_token",
-  "refreshToken": "new_refresh_token"
+  "success": true,
+  "data": {
+    "token": "new_access_token"
+  }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Missing refreshToken
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "refreshToken",
+      "message": "\"refreshToken\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or expired refresh token
+```json
+{
+  "success": false,
+  "error": "Invalid or expired refresh token"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -142,7 +261,26 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Logged out successfully"
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -161,7 +299,32 @@ Request password reset email.
 **Response (200 OK):**
 ```json
 {
-  "message": "Password reset email sent"
+  "success": true,
+  "message": "If email exists, password reset link has been sent"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    }
+  ]
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -181,33 +344,85 @@ Reset password using reset token.
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Password reset successfully"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "password",
+      "message": "\"password\" length must be at least 6 characters long"
+    },
+    {
+      "field": "token",
+      "message": "\"token\" is required"
+    }
+  ]
+}
+```
+
+**400 Bad Request** - Invalid or expired reset token
+```json
+{
+  "success": false,
+  "error": "Invalid or expired reset token"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
 ---
 
-### POST /auth/verify-email
-Verify email address.
+### GET /auth/verify-email/{token}
+Verify email address using verification token from email.
 
-**Request Body:**
-```json
-{
-  "token": "verification_token_from_email"
-}
-```
+**Parameters:**
+- `token` (path parameter, required): Verification token from email
 
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Email verified successfully"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Invalid verification token
+```json
+{
+  "success": false,
+  "error": "Invalid verification token"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
 ---
 
 ### POST /auth/resend-verification
-Resend email verification.
+Resend email verification email to the specified email address. If the email is already verified, a new verification email will still be sent. If the user doesn't exist, a generic success message is returned for security.
 
 **Request Body:**
 ```json
@@ -216,10 +431,38 @@ Resend email verification.
 }
 ```
 
+**Request Body Fields:**
+- `email` (string, required): Email address to send verification email to
+
 **Response (200 OK):**
 ```json
 {
-  "message": "Verification email sent"
+  "success": true,
+  "message": "If email exists, verification email has been sent"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "email must be a valid email"
+    }
+  ]
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -236,12 +479,14 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
-  "user": {
+  "success": true,
+  "data": {
     "id": "user-123",
     "email": "user@example.com",
-    "name": "John Doe",
+    "firstName": "John",
+    "lastName": "Doe",
     "phone": "+1234567890",
-    "role": "CUSTOMER",
+    "role": "USER",
     "emailVerified": true,
     "createdAt": "2024-01-01T00:00:00Z",
     "addresses": []
@@ -249,10 +494,28 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - No token provided or invalid token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### PUT /users/profile
-Update user profile.
+Update user profile. All fields are optional - only provided fields will be updated. If email is changed, a verification email will be sent to the new address and `emailVerified` will be set to `false`.
 
 **Headers:**
 ```
@@ -262,20 +525,75 @@ Authorization: Bearer <token>
 **Request Body:**
 ```json
 {
-  "name": "John Updated",
-  "phone": "+1234567891"
+  "firstName": "John",
+  "lastName": "Updated",
+  "phone": "+1234567891",
+  "email": "newemail@example.com"
 }
 ```
+
+**Request Body Fields:**
+- `firstName` (string, optional): User's first name
+- `lastName` (string, optional): User's last name
+- `phone` (string, optional): User's phone number
+- `email` (string, optional): User's email address. If changed, requires verification.
 
 **Response (200 OK):**
 ```json
 {
-  "user": {
+  "success": true,
+  "data": {
     "id": "user-123",
-    "email": "user@example.com",
-    "name": "John Updated",
-    "phone": "+1234567891"
-  }
+    "email": "newemail@example.com",
+    "firstName": "John",
+    "lastName": "Updated",
+    "phone": "+1234567891",
+    "emailVerified": false,
+    "role": "USER"
+  },
+  "message": "Profile updated. Please verify your new email address."
+}
+```
+
+**Note:** If email is changed, the response message will indicate that email verification is required. A verification email will be automatically sent to the new email address.
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    }
+  ]
+}
+```
+
+**400 Bad Request** - Email already in use
+```json
+{
+  "success": false,
+  "error": "Email already in use"
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -300,7 +618,52 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Password changed successfully"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "newPassword",
+      "message": "\"newPassword\" length must be at least 6 characters long"
+    },
+    {
+      "field": "currentPassword",
+      "message": "\"currentPassword\" is required"
+    }
+  ]
+}
+```
+
+**400 Bad Request** - Current password incorrect
+```json
+{
+  "success": false,
+  "error": "Current password is incorrect"
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -538,6 +901,30 @@ GET /products?page=1&limit=20&category=cat-123&minPrice=10&maxPrice=100&sort=pri
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Invalid query parameters
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "page",
+      "message": "\"page\" must be a number"
+    }
+  ]
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### GET /products/:id
@@ -551,6 +938,8 @@ Get product details.
     "name": "Product Name",
     "description": "Detailed product description",
     "price": 99.99,
+    "compareAtPrice": 129.99,
+    "originalPrice": 119.99,
     "sku": "SKU-123",
     "status": "ACTIVE",
     "stockQuantity": 100,
@@ -569,11 +958,61 @@ Get product details.
       }
     ],
     "specifications": {},
+    "returnPolicy": {
+      "window": "30 days",
+      "conditions": "Item must be unused, in original packaging"
+    },
+    "refundPolicy": {
+      "method": "original payment method",
+      "timeline": "7-14 business days"
+    },
+    "shippingPolicy": {
+      "deliveryTime": "3-5 business days",
+      "methods": ["standard", "express"]
+    },
+    "careInstructions": "Clean with soft cloth",
+    "countryOfOrigin": "China",
+    "manufacturerInfo": {
+      "name": "Manufacturer Name",
+      "contact": "support@manufacturer.com"
+    },
+    "brand": "TechBrand",
+    "modelNumber": "TB-001",
+    "weightDimensions": {
+      "weight": {
+        "value": 1.5,
+        "unit": "kg"
+      },
+      "dimensions": {
+        "length": 10,
+        "width": 5,
+        "height": 3,
+        "unit": "cm"
+      }
+    },
     "reviews": {
       "averageRating": 4.5,
       "totalReviews": 25
     }
   }
+}
+```
+
+**Error Responses:**
+
+**404 Not Found** - Product not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/prod-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -593,10 +1032,44 @@ Authorization: Bearer <admin_token>
   "name": "New Product",
   "description": "Product description",
   "price": 99.99,
+  "compareAtPrice": 129.99,
+  "originalPrice": 119.99,
   "sku": "SKU-NEW",
+  "stock": 100,
   "categoryId": "cat-123",
-  "stockQuantity": 100,
-  "status": "ACTIVE"
+  "status": "ACTIVE",
+  "returnPolicy": {
+    "window": "30 days",
+    "conditions": "Item must be unused, in original packaging"
+  },
+  "refundPolicy": {
+    "method": "original payment method",
+    "timeline": "7-14 business days"
+  },
+  "shippingPolicy": {
+    "deliveryTime": "3-5 business days",
+    "methods": ["standard", "express"]
+  },
+  "careInstructions": "Clean with soft cloth",
+  "countryOfOrigin": "China",
+  "manufacturerInfo": {
+    "name": "Manufacturer Name",
+    "contact": "support@manufacturer.com"
+  },
+  "brand": "TechBrand",
+  "modelNumber": "TB-001",
+  "weightDimensions": {
+    "weight": {
+      "value": 1.5,
+      "unit": "kg"
+    },
+    "dimensions": {
+      "length": 10,
+      "width": 5,
+      "height": 3,
+      "unit": "cm"
+    }
+  }
 }
 ```
 
@@ -607,8 +1080,73 @@ Authorization: Bearer <admin_token>
     "id": "prod-123",
     "name": "New Product",
     "price": 99.99,
-    "sku": "SKU-NEW"
+    "compareAtPrice": 129.99,
+    "originalPrice": 119.99,
+    "sku": "SKU-NEW",
+    "stock": 100,
+    "returnPolicy": {
+      "window": "30 days",
+      "conditions": "Item must be unused, in original packaging"
+    },
+    "brand": "TechBrand",
+    "modelNumber": "TB-001"
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "name",
+      "message": "\"name\" is required"
+    },
+    {
+      "field": "price",
+      "message": "\"price\" must be a number"
+    },
+    {
+      "field": "sku",
+      "message": "\"sku\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**409 Conflict** - SKU already exists
+```json
+{
+  "success": false,
+  "error": "SKU already exists"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -626,7 +1164,13 @@ Authorization: Bearer <admin_token>
 ```json
 {
   "name": "Updated Product Name",
-  "price": 89.99
+  "price": 89.99,
+  "originalPrice": 109.99,
+  "returnPolicy": {
+    "window": "45 days",
+    "conditions": "Updated return conditions"
+  },
+  "brand": "UpdatedBrand"
 }
 ```
 
@@ -638,6 +1182,54 @@ Authorization: Bearer <admin_token>
     "name": "Updated Product Name",
     "price": 89.99
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "price",
+      "message": "\"price\" must be a positive number"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Product not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/prod-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -654,7 +1246,42 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Product deleted successfully"
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Product not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/prod-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -681,6 +1308,16 @@ Get all categories.
 }
 ```
 
+**Error Responses:**
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### GET /products/categories/:id
@@ -697,6 +1334,24 @@ Get category by ID.
     "parentId": null,
     "children": []
   }
+}
+```
+
+**Error Responses:**
+
+**404 Not Found** - Category not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/categories/cat-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -731,6 +1386,54 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "name",
+      "message": "\"name\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**409 Conflict** - Category slug already exists
+```json
+{
+  "success": false,
+  "error": "Category slug already exists"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### PUT /products/categories/:id
@@ -759,6 +1462,54 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "name",
+      "message": "\"name\" must be a string"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Category not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/categories/cat-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### DELETE /products/categories/:id
@@ -772,7 +1523,50 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Category deleted successfully"
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Category not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/categories/cat-123"
+}
+```
+
+**422 Unprocessable Entity** - Category has products or children
+```json
+{
+  "success": false,
+  "error": "Cannot delete category with products or subcategories"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -809,6 +1603,24 @@ Authorization: Bearer <token>
     "total": 219.97,
     "discount": 0
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -849,6 +1661,58 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "productId",
+      "message": "\"productId\" is required"
+    },
+    {
+      "field": "quantity",
+      "message": "\"quantity\" must be greater than 0"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Product not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/products/prod-123"
+}
+```
+
+**422 Unprocessable Entity** - Insufficient stock
+```json
+{
+  "success": false,
+  "error": "Insufficient stock available"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### PUT /cart/items/:id
@@ -881,6 +1745,54 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "quantity",
+      "message": "\"quantity\" must be greater than 0"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Cart item not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/cart/items/item-123"
+}
+```
+
+**422 Unprocessable Entity** - Insufficient stock
+```json
+{
+  "success": false,
+  "error": "Insufficient stock available"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### DELETE /cart/items/:id
@@ -894,10 +1806,37 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Item removed from cart",
   "cart": {
     "total": 0
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Cart item not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/cart/items/item-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -914,7 +1853,26 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Cart cleared successfully"
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -941,6 +1899,24 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### POST /cart/apply-coupon
@@ -961,11 +1937,62 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Coupon applied successfully",
   "cart": {
     "discount": 10.00,
     "total": 189.98
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Invalid coupon code
+```json
+{
+  "success": false,
+  "error": "Invalid coupon code"
+}
+```
+
+**400 Bad Request** - Coupon expired
+```json
+{
+  "success": false,
+  "error": "Coupon has expired"
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Coupon not found
+```json
+{
+  "success": false,
+  "error": "Coupon not found"
+}
+```
+
+**422 Unprocessable Entity** - Minimum purchase not met
+```json
+{
+  "success": false,
+  "error": "Minimum purchase amount not met"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -982,11 +2009,38 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Coupon removed",
   "cart": {
     "discount": 0,
     "total": 199.98
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - No coupon applied
+```json
+{
+  "success": false,
+  "error": "No coupon applied to cart"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1040,6 +2094,66 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "shippingAddressId",
+      "message": "\"shippingAddressId\" is required"
+    },
+    {
+      "field": "paymentMethod",
+      "message": "\"paymentMethod\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Cart or address not found
+```json
+{
+  "success": false,
+  "error": "Cart not found"
+}
+```
+
+**422 Unprocessable Entity** - Cart is empty
+```json
+{
+  "success": false,
+  "error": "Cart is empty"
+}
+```
+
+**422 Unprocessable Entity** - Insufficient stock
+```json
+{
+  "success": false,
+  "error": "Insufficient stock for one or more items"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### GET /orders
@@ -1072,6 +2186,24 @@ Authorization: Bearer <token>
     "limit": 20,
     "total": 10
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1116,6 +2248,40 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Order belongs to another user
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Order not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/orders/order-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### PUT /orders/:id/cancel
@@ -1136,11 +2302,54 @@ Authorization: Bearer <token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Order cancelled successfully",
   "order": {
     "id": "order-123",
     "status": "CANCELLED"
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Order cannot be cancelled
+```json
+{
+  "success": false,
+  "error": "Order cannot be cancelled in current status"
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Order belongs to another user
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Order not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/orders/order-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1170,6 +2379,40 @@ Authorization: Bearer <token>
     ],
     "estimatedDelivery": "2024-01-05T00:00:00Z"
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Order belongs to another user
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Order not found or not shipped
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/orders/order-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1235,6 +2478,62 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "orderId",
+      "message": "\"orderId\" is required"
+    },
+    {
+      "field": "amount",
+      "message": "\"amount\" must be a positive number"
+    },
+    {
+      "field": "gateway",
+      "message": "\"gateway\" must be one of [STRIPE, PAYPAL, RAZORPAY]"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Order not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/orders/order-123"
+}
+```
+
+**422 Unprocessable Entity** - Payment gateway not available
+```json
+{
+  "success": false,
+  "error": "Payment gateway not available"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### POST /payments/confirm
@@ -1267,6 +2566,54 @@ Authorization: Bearer <token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "paymentIntentId",
+      "message": "\"paymentIntentId\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**404 Not Found** - Payment intent not found
+```json
+{
+  "success": false,
+  "error": "Payment intent not found"
+}
+```
+
+**422 Unprocessable Entity** - Payment failed
+```json
+{
+  "success": false,
+  "error": "Payment processing failed"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### GET /payments/:orderId
@@ -1288,6 +2635,40 @@ Authorization: Bearer <token>
     "gateway": "STRIPE",
     "createdAt": "2024-01-01T00:00:00Z"
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Order belongs to another user
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Payment not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/payments/order-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1344,6 +2725,70 @@ Authorization: Bearer <token>
     "status": "SUCCEEDED",
     "reason": "Customer request"
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "amount",
+      "message": "\"amount\" must be a positive number"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (admin only)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Payment not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/payments/pay-123"
+}
+```
+
+**422 Unprocessable Entity** - Refund amount exceeds payment amount
+```json
+{
+  "success": false,
+  "error": "Refund amount cannot exceed payment amount"
+}
+```
+
+**422 Unprocessable Entity** - Payment not eligible for refund
+```json
+{
+  "success": false,
+  "error": "Payment not eligible for refund"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -1909,6 +3354,294 @@ Calculate shipping cost.
 
 ---
 
+### Logistics Operations
+
+#### GET /logistics/track
+Track shipment by order ID or tracking number.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `orderId` (string, optional): Order ID
+- `trackingNumber` (string, optional): Tracking number or AWB
+- `providerType` (string, optional): Provider type
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "trackingNumber": "AWB123456",
+    "status": "in_transit",
+    "providerStatus": "Out for Delivery",
+    "events": [
+      {
+        "timestamp": "2026-01-10T10:00:00Z",
+        "location": "Mumbai",
+        "status": "in_transit",
+        "description": "Package in transit"
+      }
+    ],
+    "estimatedDelivery": "2026-01-12T18:00:00Z"
+  }
+}
+```
+
+---
+
+#### POST /logistics/rates
+Calculate shipping rates. Set compareAll=true to compare rates across all providers.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `compareAll` (boolean, optional): Compare rates from all active providers
+- `providerType` (string, optional): Specific provider type
+
+**Request Body:**
+```json
+{
+  "pickup": {
+    "pincode": "400001",
+    "city": "Mumbai",
+    "state": "Maharashtra"
+  },
+  "delivery": {
+    "pincode": "110001",
+    "city": "New Delhi",
+    "state": "Delhi"
+  },
+  "weight": 1.5,
+  "dimensions": {
+    "length": 20,
+    "width": 15,
+    "height": 10
+  },
+  "codAmount": 1000
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "provider": "SHIPROCKET",
+      "courierName": "Express",
+      "rate": 150.00,
+      "estimatedDays": 2,
+      "codAvailable": true
+    }
+  ]
+}
+```
+
+---
+
+#### POST /logistics/shipments
+Create shipment for an order (Admin/Vendor only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Query Parameters:**
+- `providerId` (string, optional): Specific provider ID
+
+**Request Body:**
+```json
+{
+  "orderId": "order_123",
+  "weight": 1.5,
+  "dimensions": {
+    "length": 20,
+    "width": 15,
+    "height": 10
+  },
+  "codAmount": 1000
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "shipment_123",
+    "awbNumber": "AWB123456",
+    "trackingNumber": "AWB123456",
+    "status": "created",
+    "rate": 150.00,
+    "labelUrl": "https://example.com/labels/AWB123456.pdf"
+  },
+  "message": "Shipment created successfully"
+}
+```
+
+---
+
+#### GET /logistics/shipments/:orderId
+Get shipment status for an order.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "shipment_123",
+      "awbNumber": "AWB123456",
+      "trackingNumber": "AWB123456",
+      "status": "in_transit",
+      "rate": 150.00,
+      "estimatedDelivery": "2026-01-12T18:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+#### POST /logistics/shipments/:shipmentId/label
+Generate shipping label (Admin/Vendor only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "labelUrl": "https://example.com/labels/AWB123456.pdf",
+    "awbNumber": "AWB123456"
+  },
+  "message": "Label generated successfully"
+}
+```
+
+---
+
+#### POST /logistics/shipments/:shipmentId/pickup
+Schedule pickup for a shipment (Admin/Vendor only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Request Body:**
+```json
+{
+  "pickupDate": "2026-01-11",
+  "pickupTime": "10:00-17:00"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "success": true,
+    "pickupDate": "2026-01-11"
+  },
+  "message": "Pickup scheduled successfully"
+}
+```
+
+---
+
+#### DELETE /logistics/shipments/:shipmentId
+Cancel a shipment (Admin/Vendor only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Request Body:**
+```json
+{
+  "reason": "Order cancelled by customer"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "shipment_123",
+    "status": "cancelled"
+  },
+  "message": "Shipment cancelled successfully"
+}
+```
+
+---
+
+#### POST /logistics/returns
+Handle return shipment.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "orderId": "order_123",
+  "pickup": {
+    "name": "John Doe",
+    "address": "456 Customer St",
+    "city": "New Delhi",
+    "state": "Delhi",
+    "pincode": "110001",
+    "phone": "+919876543211"
+  },
+  "delivery": {
+    "name": "Warehouse",
+    "address": "123 Warehouse St",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "pincode": "400001",
+    "phone": "+919876543210"
+  }
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "SR789012",
+    "awbNumber": "AWB789012",
+    "trackingNumber": "AWB789012"
+  },
+  "message": "Return shipment created successfully"
+}
+```
+
+---
+
 ## Tax
 
 ### POST /tax/calculate
@@ -2121,6 +3854,245 @@ Authorization: Bearer <token>
 
 ---
 
+### Admin Logistics Provider Management
+
+#### POST /admin/logistics-providers
+Create logistics provider (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Request Body:**
+```json
+{
+  "name": "Shiprocket",
+  "type": "SHIPROCKET",
+  "config": {
+    "email": "merchant@example.com",
+    "password": "password123",
+    "apiKey": "API_KEY",
+    "environment": "production"
+  },
+  "supportedRegions": ["IN", "US"],
+  "supportedServices": ["express", "standard", "cod"],
+  "isActive": true,
+  "isDefault": false,
+  "priority": 0
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "log_prov_123",
+    "name": "Shiprocket",
+    "type": "SHIPROCKET",
+    "isActive": true,
+    "isDefault": false,
+    "config": {
+      "email": "merchant@example.com",
+      "password": "***d123",
+      "apiKey": "***KEY",
+      "environment": "production"
+    },
+    "supportedRegions": ["IN", "US"],
+    "supportedServices": ["express", "standard", "cod"],
+    "priority": 0
+  },
+  "message": "Logistics provider created successfully"
+}
+```
+
+---
+
+#### GET /admin/logistics-providers
+Get all logistics providers (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Query Parameters:**
+- `isActive` (boolean, optional): Filter by active status
+- `type` (string, optional): Filter by provider type
+- `page` (integer, optional): Page number
+- `limit` (integer, optional): Items per page
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "log_prov_123",
+      "name": "Shiprocket",
+      "type": "SHIPROCKET",
+      "isActive": true,
+      "isDefault": true,
+      "config": {
+        "email": "merchant@example.com",
+        "password": "***d123",
+        "apiKey": "***KEY"
+      },
+      "supportedRegions": ["IN", "US"],
+      "supportedServices": ["express", "standard", "cod"]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 1,
+    "pages": 1
+  }
+}
+```
+
+---
+
+#### GET /admin/logistics-providers/:id
+Get logistics provider by ID (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "log_prov_123",
+    "name": "Shiprocket",
+    "type": "SHIPROCKET",
+    "isActive": true,
+    "isDefault": true,
+    "config": {
+      "email": "merchant@example.com",
+      "password": "***d123",
+      "apiKey": "***KEY"
+    }
+  }
+}
+```
+
+---
+
+#### PUT /admin/logistics-providers/:id
+Update logistics provider (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Request Body:**
+```json
+{
+  "name": "Shiprocket Updated",
+  "config": {
+    "email": "newemail@example.com",
+    "password": "newpassword",
+    "apiKey": "NEW_API_KEY"
+  },
+  "isActive": true,
+  "isDefault": true
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "log_prov_123",
+    "name": "Shiprocket Updated",
+    "isActive": true,
+    "isDefault": true
+  },
+  "message": "Logistics provider updated successfully"
+}
+```
+
+---
+
+#### PATCH /admin/logistics-providers/:id/toggle
+Toggle logistics provider active status (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "log_prov_123",
+    "isActive": false
+  },
+  "message": "Logistics provider deactivated successfully"
+}
+```
+
+---
+
+#### PATCH /admin/logistics-providers/:id/set-default
+Set default logistics provider (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "log_prov_123",
+    "isDefault": true
+  },
+  "message": "Default logistics provider set successfully"
+}
+```
+
+---
+
+#### DELETE /admin/logistics-providers/:id
+Delete logistics provider (Admin only).
+
+**Headers:**
+```
+Authorization: Bearer <admin_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Logistics provider deleted successfully"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Cannot delete provider with active shipments
+```json
+{
+  "success": false,
+  "error": "Cannot delete provider with 5 active shipments. Please cancel or complete shipments first."
+}
+```
+
+---
+
 ## Search
 
 ### GET /search
@@ -2216,6 +4188,32 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ### User Management (Admin)
@@ -2255,6 +4253,32 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### POST /admin/users
@@ -2287,6 +4311,58 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    },
+    {
+      "field": "password",
+      "message": "\"password\" is required"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**409 Conflict** - Email already exists
+```json
+{
+  "success": false,
+  "error": "Email already exists"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### PUT /admin/users/:id
@@ -2316,6 +4392,54 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "role",
+      "message": "\"role\" must be one of [USER, ADMIN, VENDOR]"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - User not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/admin/users/user-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### PUT /admin/users/:id/verify
@@ -2329,11 +4453,46 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "User verified successfully",
   "user": {
     "id": "user-123",
     "emailVerified": true
   }
+}
+```
+
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - User not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/admin/users/user-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -2357,11 +4516,60 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "User deactivated",
   "user": {
     "id": "user-123",
     "isActive": false
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "isActive",
+      "message": "\"isActive\" must be a boolean"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - User not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/admin/users/user-123"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -2403,6 +4611,32 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 #### PUT /admin/orders/:id/status
@@ -2425,11 +4659,68 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Order status updated",
   "order": {
     "id": "order-123",
     "status": "SHIPPED"
   }
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "status",
+      "message": "\"status\" must be one of [CREATED, PAYMENT_PENDING, PAID, PACKED, SHIPPED, DELIVERED, COMPLETED, CANCELLED, REFUNDED]"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Order not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/admin/orders/order-123"
+}
+```
+
+**422 Unprocessable Entity** - Invalid status transition
+```json
+{
+  "success": false,
+  "error": "Invalid status transition"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
 }
 ```
 
@@ -2454,6 +4745,7 @@ Authorization: Bearer <admin_token>
 **Response (200 OK):**
 ```json
 {
+  "success": true,
   "message": "Refund processed",
   "refund": {
     "id": "refund-123",
@@ -2462,71 +4754,183 @@ Authorization: Bearer <admin_token>
 }
 ```
 
+**Error Responses:**
+
+**400 Bad Request** - Validation error
+```json
+{
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "amount",
+      "message": "\"amount\" must be a positive number"
+    }
+  ]
+}
+```
+
+**401 Unauthorized** - Invalid or missing token
+```json
+{
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**403 Forbidden** - Insufficient permissions (not admin)
+```json
+{
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
+}
+```
+
+**404 Not Found** - Order not found
+```json
+{
+  "success": false,
+  "error": "Not Found - /api/v1/admin/orders/order-123"
+}
+```
+
+**422 Unprocessable Entity** - Refund amount exceeds order total
+```json
+{
+  "success": false,
+  "error": "Refund amount cannot exceed order total"
+}
+```
+
+**422 Unprocessable Entity** - Order not eligible for refund
+```json
+{
+  "success": false,
+  "error": "Order not eligible for refund"
+}
+```
+
+**500 Internal Server Error**
+```json
+{
+  "success": false,
+  "error": "Server Error"
+}
+```
+
 ---
 
 ## Error Responses
 
-All endpoints may return the following error responses:
+All endpoints may return the following error responses. All error responses follow the format defined in the Swagger Error schema with `success: false`.
 
 ### 400 Bad Request
+Validation errors or invalid input.
+
+**Validation Error Format:**
 ```json
 {
-  "error": "Invalid request data",
-  "details": {
-    "field": "email",
-    "message": "Invalid email format"
-  }
+  "success": false,
+  "error": "Validation error",
+  "errors": [
+    {
+      "field": "email",
+      "message": "\"email\" must be a valid email"
+    },
+    {
+      "field": "password",
+      "message": "\"password\" length must be at least 6 characters long"
+    }
+  ]
+}
+```
+
+**General Bad Request:**
+```json
+{
+  "success": false,
+  "error": "User already exists"
 }
 ```
 
 ### 401 Unauthorized
+Missing, invalid, or expired authentication token.
+
 ```json
 {
-  "error": "Unauthorized",
-  "message": "Invalid or expired token"
+  "success": false,
+  "error": "No token, authorization denied"
+}
+```
+
+**Token Expired:**
+```json
+{
+  "success": false,
+  "error": "Token expired"
+}
+```
+
+**Invalid Token:**
+```json
+{
+  "success": false,
+  "error": "Invalid token"
 }
 ```
 
 ### 403 Forbidden
+Valid token but insufficient permissions.
+
 ```json
 {
-  "error": "Forbidden",
-  "message": "Insufficient permissions"
+  "success": false,
+  "error": "Forbidden - Insufficient permissions"
 }
 ```
 
 ### 404 Not Found
+Resource doesn't exist.
+
 ```json
 {
-  "error": "Not Found",
-  "message": "Resource not found"
+  "success": false,
+  "error": "Not Found - /api/v1/resource/123"
 }
 ```
 
 ### 409 Conflict
+Resource conflict (e.g., duplicate email, duplicate SKU).
+
 ```json
 {
-  "error": "Conflict",
-  "message": "Resource already exists"
+  "success": false,
+  "error": "Email already in use"
 }
 ```
 
 ### 422 Unprocessable Entity
+Valid syntax but semantic errors.
+
 ```json
 {
-  "error": "Validation Error",
-  "details": [
+  "success": false,
+  "error": "Unprocessable Entity",
+  "errors": [
     {
-      "field": "email",
-      "message": "Email is required"
+      "field": "quantity",
+      "message": "Insufficient stock available"
     }
   ]
 }
 ```
 
 ### 429 Too Many Requests
+Rate limit exceeded.
+
 ```json
 {
+  "success": false,
   "error": "Rate Limit Exceeded",
   "message": "Too many requests. Please try again later.",
   "retryAfter": 60
@@ -2534,12 +4938,16 @@ All endpoints may return the following error responses:
 ```
 
 ### 500 Internal Server Error
+Server-side error.
+
 ```json
 {
-  "error": "Internal Server Error",
-  "message": "An unexpected error occurred"
+  "success": false,
+  "error": "Server Error"
 }
 ```
+
+**Note:** In development mode, the response may include a `stack` property with the error stack trace.
 
 ---
 

@@ -1,8 +1,12 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
+const jwksClient = require('jwks-rsa');
 const prisma = require('../config/database');
 const { generateToken, generateRefreshToken } = require('../utils/jwt');
 const logger = require('../utils/logger');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/email');
 
 const hashPassword = async (password) => {
   const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_ROUNDS || '10'));
@@ -22,7 +26,7 @@ const generateResetToken = () => {
 };
 
 const register = async (userData) => {
-  const { email, password, firstName, lastName, phone } = userData;
+  const { email, password, firstName, lastName, phone, isAdmin } = userData;
 
   // Check if user exists
   const existingUser = await prisma.user.findUnique({
@@ -39,6 +43,9 @@ const register = async (userData) => {
   // Generate verification token
   const verificationToken = generateVerificationToken();
 
+  // Determine user role based on isAdmin flag
+  const role = isAdmin === true ? 'ADMIN' : 'USER';
+
   // Create user
   const user = await prisma.user.create({
     data: {
@@ -49,18 +56,21 @@ const register = async (userData) => {
       phone,
       verificationToken,
       emailVerified: false,
+      role,
     },
   });
 
-  // TODO: Send verification email
+  // Send verification email
+  await sendVerificationEmail(email, verificationToken, firstName || '');
 
-  logger.info(`New user registered: ${email}`);
+  logger.info(`New user registered: ${email} with role: ${role}`);
 
   return {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
+    role: user.role,
     emailVerified: user.emailVerified,
   };
 };
@@ -193,7 +203,8 @@ const forgotPassword = async (email) => {
     },
   });
 
-  // TODO: Send password reset email
+  // Send password reset email
+  await sendPasswordResetEmail(email, resetToken, user.firstName || '');
 
   logger.info(`Password reset requested: ${email}`);
 
@@ -285,14 +296,252 @@ const refreshToken = async (refreshToken) => {
   return { token };
 };
 
+const resendVerificationEmail = async (email) => {
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    // Don't reveal if user exists (security best practice)
+    return { message: 'If email exists, verification email has been sent' };
+  }
+
+  // Generate new verification token if user doesn't have one or if already verified (allow re-verification)
+  let verificationToken = user.verificationToken;
+  
+  if (!verificationToken) {
+    verificationToken = generateVerificationToken();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken,
+        emailVerified: false, // Reset verification status when resending
+      },
+    });
+  }
+
+  // Send verification email
+  await sendVerificationEmail(email, verificationToken, user.firstName || '');
+
+  logger.info(`Verification email resent to: ${email}`);
+
+  return { message: 'If email exists, verification email has been sent' };
+};
+
+/**
+ * Create session and return same shape as login (used by social login).
+ */
+const createSessionAndReturnTokens = async (user, ipAddress, userAgent) => {
+  const token = generateToken({ id: user.id, email: user.email, role: user.role });
+  const refreshToken = generateRefreshToken({ id: user.id });
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      token: refreshToken,
+      ipAddress,
+      userAgent,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    },
+  });
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      emailVerified: user.emailVerified,
+    },
+    token,
+    refreshToken,
+  };
+};
+
+/**
+ * Verify Google id_token and find or create user, then return tokens.
+ */
+const loginWithGoogle = async (idToken, ipAddress, userAgent) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    const e = new Error('Google sign-in is not configured');
+    e.statusCode = 503;
+    throw e;
+  }
+  const client = new OAuth2Client(clientId);
+  let payload;
+  try {
+    const ticket = await client.verifyIdToken({ idToken, audience: clientId });
+    payload = ticket.getPayload();
+  } catch (err) {
+    logger.warn('Google id_token verification failed', { error: err.message });
+    const e = new Error('Invalid Google token');
+    e.statusCode = 401;
+    throw e;
+  }
+  const { sub: googleId, email, name } = payload || {};
+  if (!email) {
+    const e = new Error('Invalid Google token: missing email');
+    e.statusCode = 401;
+    throw e;
+  }
+
+  let user = await prisma.user.findUnique({ where: { googleId } });
+  if (user) {
+    if (!user.isActive) {
+      const e = new Error('Account is inactive');
+      e.statusCode = 401;
+      throw e;
+    }
+    logger.info(`User logged in with Google: ${email}`);
+    return createSessionAndReturnTokens(user, ipAddress, userAgent);
+  }
+
+  user = await prisma.user.findUnique({ where: { email } });
+  if (user) {
+    if (!user.isActive) {
+      const e = new Error('Account is inactive');
+      e.statusCode = 401;
+      throw e;
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { googleId },
+    });
+    logger.info(`User linked Google and logged in: ${email}`);
+    return createSessionAndReturnTokens({ ...user, googleId }, ipAddress, userAgent);
+  }
+
+  const nameParts = (name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || null;
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+  const randomPassword = crypto.randomBytes(32).toString('hex');
+  const hashedPassword = await hashPassword(randomPassword);
+  user = await prisma.user.create({
+    data: {
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      googleId,
+      role: 'USER',
+      emailVerified: true,
+    },
+  });
+  logger.info(`New user registered via Google: ${email}`);
+  return createSessionAndReturnTokens(user, ipAddress, userAgent);
+};
+
+/**
+ * Verify Microsoft id_token and find or create user, then return tokens.
+ */
+const loginWithMicrosoft = async (idToken, ipAddress, userAgent) => {
+  const clientId = process.env.MICROSOFT_CLIENT_ID;
+  const tenantId = process.env.MICROSOFT_TENANT_ID || 'common';
+  if (!clientId) {
+    const e = new Error('Microsoft sign-in is not configured');
+    e.statusCode = 503;
+    throw e;
+  }
+  const jwksUri = `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`;
+  const client = jwksClient({ jwksUri, cache: true, rateLimit: true });
+
+  const getKey = (header, callback) => {
+    client.getSigningKey(header.kid, (err, key) => {
+      if (err) {
+        callback(err);
+        return;
+      }
+      const signingKey = key?.publicKey || key?.rsaPublicKey;
+      callback(null, signingKey);
+    });
+  };
+
+  const issuer = `https://login.microsoftonline.com/${tenantId}/v2.0`;
+  let payload;
+  try {
+    payload = await new Promise((resolve, reject) => {
+      jwt.verify(idToken, getKey, {
+        audience: clientId,
+        issuer,
+        algorithms: ['RS256'],
+      }, (err, decoded) => {
+        if (err) reject(err);
+        else resolve(decoded);
+      });
+    });
+  } catch (err) {
+    logger.warn('Microsoft id_token verification failed', { error: err.message });
+    const e = new Error('Invalid Microsoft token');
+    e.statusCode = 401;
+    throw e;
+  }
+
+  const microsoftId = payload.oid || payload.sub;
+  const email = payload.email || payload.preferred_username;
+  if (!email) {
+    const e = new Error('Invalid Microsoft token: missing email');
+    e.statusCode = 401;
+    throw e;
+  }
+  const name = payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' ') || null;
+  const nameParts = (name || '').trim().split(/\s+/);
+  const firstName = nameParts[0] || null;
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : null;
+
+  let user = await prisma.user.findUnique({ where: { microsoftId } });
+  if (user) {
+    if (!user.isActive) {
+      const e = new Error('Account is inactive');
+      e.statusCode = 401;
+      throw e;
+    }
+    logger.info(`User logged in with Microsoft: ${email}`);
+    return createSessionAndReturnTokens(user, ipAddress, userAgent);
+  }
+
+  user = await prisma.user.findUnique({ where: { email } });
+  if (user) {
+    if (!user.isActive) {
+      const e = new Error('Account is inactive');
+      e.statusCode = 401;
+      throw e;
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { microsoftId },
+    });
+    logger.info(`User linked Microsoft and logged in: ${email}`);
+    return createSessionAndReturnTokens({ ...user, microsoftId }, ipAddress, userAgent);
+  }
+
+  const randomPassword = crypto.randomBytes(32).toString('hex');
+  const hashedPassword = await hashPassword(randomPassword);
+  user = await prisma.user.create({
+    data: {
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      microsoftId,
+      role: 'USER',
+      emailVerified: true,
+    },
+  });
+  logger.info(`New user registered via Microsoft: ${email}`);
+  return createSessionAndReturnTokens(user, ipAddress, userAgent);
+};
+
 module.exports = {
   register,
   login,
+  loginWithGoogle,
+  loginWithMicrosoft,
   verifyEmail,
   forgotPassword,
   resetPassword,
   changePassword,
   refreshToken,
+  resendVerificationEmail,
   hashPassword,
   comparePassword,
 };

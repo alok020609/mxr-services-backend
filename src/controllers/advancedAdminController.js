@@ -29,7 +29,8 @@ const getOrderNotes = asyncHandler(async (req, res) => {
       admin: {
         select: {
           id: true,
-          name: true,
+          firstName: true,
+          lastName: true,
           email: true,
         },
       },
@@ -80,7 +81,16 @@ const getAdminActivityFeed = asyncHandler(async (req, res) => {
         admin: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
             email: true,
           },
         },

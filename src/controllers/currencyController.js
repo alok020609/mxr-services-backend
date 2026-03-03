@@ -1,6 +1,13 @@
 const prisma = require('../config/database');
 const { asyncHandler } = require('../utils/asyncHandler');
 
+function serializeCurrency(c) {
+  return {
+    ...c,
+    exchangeRate: c.exchangeRate ? Number(c.exchangeRate) : 1,
+  };
+}
+
 const getCurrencies = asyncHandler(async (req, res) => {
   const currencies = await prisma.currency.findMany({
     where: { isActive: true },
@@ -9,7 +16,25 @@ const getCurrencies = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: currencies,
+    data: currencies.map(serializeCurrency),
+  });
+});
+
+const getDefaultCurrency = asyncHandler(async (req, res) => {
+  const currency = await prisma.currency.findFirst({
+    where: { isDefault: true, isActive: true },
+  });
+
+  if (!currency) {
+    return res.status(404).json({
+      success: false,
+      error: 'Default currency not found',
+    });
+  }
+
+  res.json({
+    success: true,
+    data: serializeCurrency(currency),
   });
 });
 
@@ -27,7 +52,7 @@ const getCurrency = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: currency,
+    data: serializeCurrency(currency),
   });
 });
 
@@ -50,7 +75,10 @@ const convertCurrency = asyncHandler(async (req, res) => {
   }
 
   // Convert: amount * (toRate / fromRate)
-  const convertedAmount = (parseFloat(amount) * toCurrency.exchangeRate) / fromCurrency.exchangeRate;
+  const fromRate = Number(fromCurrency.exchangeRate) || 1;
+  const toRate = Number(toCurrency.exchangeRate) || 1;
+  const convertedAmount = (parseFloat(amount) * toRate) / fromRate;
+  const rate = toRate / fromRate;
 
   res.json({
     success: true,
@@ -63,7 +91,7 @@ const convertCurrency = asyncHandler(async (req, res) => {
         code: toCurrency.code,
         amount: convertedAmount,
       },
-      rate: toCurrency.exchangeRate / fromCurrency.exchangeRate,
+      rate,
     },
   });
 });
@@ -88,6 +116,7 @@ const updateExchangeRates = asyncHandler(async (req, res) => {
 
 module.exports = {
   getCurrencies,
+  getDefaultCurrency,
   getCurrency,
   convertCurrency,
   updateExchangeRates,

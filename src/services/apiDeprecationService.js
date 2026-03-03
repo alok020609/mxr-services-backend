@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class APIDeprecationService {
   // API Versioning Strategy
@@ -43,11 +43,16 @@ class APIDeprecationService {
 
   // Get deprecation notices
   static async getDeprecationNotices(version) {
+    const where = {
+      status: { in: ['ANNOUNCED', 'DEPRECATED'] },
+    };
+
+    if (version) {
+      where.version = version;
+    }
+
     const notices = await prisma.apiDeprecation.findMany({
-      where: {
-        version,
-        status: { in: ['ANNOUNCED', 'DEPRECATED'] },
-      },
+      where,
       orderBy: { deprecationDate: 'asc' },
     });
 

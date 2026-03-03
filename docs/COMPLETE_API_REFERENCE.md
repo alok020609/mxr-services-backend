@@ -5334,6 +5334,42 @@ Retrieve frequently asked questions
 
 ---
 
+### POST /api/v1/support/contact
+
+Submit contact form (public)
+
+Submit a contact form. No authentication required. If the client sends a valid Bearer token, the submission is linked to that user. Use this for the public "Contact us" page.
+
+**Permissions**: Public (no auth required). Optional Bearer token to link submission to user.
+
+**Request Body:**
+- `name` (string, required)
+- `email` (string, required)
+- `message` (string, required)
+- `phone` (string, optional)
+- `freeSiteVisit` (boolean, optional)
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": { "id": "cuid", "createdAt": "2026-01-01T00:00:00.000Z" },
+  "message": "Contact submission received"
+}
+```
+
+**Error Responses:**
+
+**400 Bad Request** - Name, email, or message missing
+```json
+{
+  "success": false,
+  "error": "Name is required"
+}
+```
+
+---
+
 ### POST /api/v1/support/tickets
 
 Create support ticket
@@ -9814,13 +9850,87 @@ Update mail settings. Partial update: send only the keys you want to change.
     "includeOrderSummary": true,
     "includeInvoicePdf": true,
     "includeShippingAddress": true
-  }
+  },
+  "contactNotificationEmail": "admin@example.com"
 }
 ```
+
+**Note:** `contactNotificationEmail` is the address that receives an email when someone submits the public contact form (`POST /api/v1/support/contact`). If not set in admin panel, the app uses env `CONTACT_NOTIFICATION_EMAIL` or `ADMIN_EMAIL`.
 
 **Response (200 OK):** Same shape as GET; returns the updated settings.
 
 **Error Responses:** 401 Unauthorized, 403 Forbidden (admin only), 500 Internal Server Error.
+
+---
+
+### GET /api/v1/admin/contact-submissions
+
+List contact form submissions. Paginated; optional filters by status and whether submission is linked to a user.
+
+**Permissions**: Admin (Bearer token required)
+
+**Query Parameters:**
+- `page` (integer, optional): Page number (default: 1)
+- `limit` (integer, optional): Items per page (default: 20, max: 100)
+- `hasUser` (string, optional): Filter by linked user – `true` (has userId), `false` (guest only)
+- `status` (string, optional): Filter by status – `NEW`, `WAITING_FOR_CONFIRMATION`, `DONE`
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "cuid",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "message": "Message text",
+      "freeSiteVisit": true,
+      "userId": "user_id_or_null",
+      "status": "NEW",
+      "visitAddress": null,
+      "proposedQuoteAmount": null,
+      "proposedQuoteDescription": null,
+      "visitScheduledAt": null,
+      "quoteSentAt": null,
+      "adminNotes": null,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "user": { "id": "...", "email": "...", "firstName": "...", "lastName": "..." }
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 50, "pages": 3 }
+}
+```
+
+**Error Responses:** 401 Unauthorized, 403 Forbidden (admin only), 500 Internal Server Error.
+
+---
+
+### PATCH /api/v1/admin/contact-submissions/:id
+
+Update a contact submission (partial update). Admin can set status, visit address, proposed quote, visit/quote dates, and admin notes.
+
+**Permissions**: Admin (Bearer token required)
+
+**Path Parameters:**
+- `id` (string, **required**): Contact submission ID
+
+**Request Body (all optional):**
+- `status` (string): `NEW` | `WAITING_FOR_CONFIRMATION` | `DONE`
+- `visitAddress` (string, nullable): Address for the site visit
+- `proposedQuoteAmount` (number, nullable): Proposed quote amount (e.g. 1500.50)
+- `proposedQuoteDescription` (string, nullable): Description of the proposed quote
+- `visitScheduledAt` (string, nullable): ISO date-time when visit is scheduled (e.g. "2026-02-20T10:00:00.000Z"); send null to clear
+- `quoteSentAt` (string, nullable): ISO date-time when quote was sent; send null to clear
+- `adminNotes` (string, nullable): Admin follow-up notes
+
+**Response (200 OK):** Returns the updated submission (same shape as list items, including `user` when linked).
+
+**Error Responses:**
+- **400 Bad Request** – Invalid status value or invalid date format for visitScheduledAt/quoteSentAt
+- **404 Not Found** – Contact submission not found
+- 401 Unauthorized, 403 Forbidden (admin only), 500 Internal Server Error
 
 ---
 

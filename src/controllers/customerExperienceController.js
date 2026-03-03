@@ -3,11 +3,20 @@ const { asyncHandler } = require('../utils/asyncHandler');
 
 // Product Q&A
 const getProductQuestions = asyncHandler(async (req, res) => {
+  const { answeredOnly } = req.query;
+  
+  const where = {
+    productId: req.params.productId,
+  };
+  
+  // Only filter by answered if explicitly requested (for public display)
+  // By default, return all questions so users can see their own questions
+  if (answeredOnly === 'true') {
+    where.answer = { not: null };
+  }
+
   const questions = await prisma.productQuestion.findMany({
-    where: {
-      productId: req.params.productId,
-      answer: { not: null },
-    },
+    where,
     include: {
       user: {
         select: {

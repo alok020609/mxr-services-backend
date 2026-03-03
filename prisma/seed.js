@@ -82,6 +82,19 @@ async function main() {
     },
   });
 
+  await prisma.paymentGateway.upsert({
+    where: { type: 'PAYU' },
+    update: {},
+    create: {
+      name: 'PayU',
+      type: 'PAYU',
+      isActive: false,
+      config: {},
+      supportedCurrencies: ['INR'],
+      supportedMethods: ['card', 'upi', 'netbanking', 'wallet'],
+    },
+  });
+
   console.log('Created payment gateways');
 
   // Create default settings

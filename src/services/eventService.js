@@ -1,6 +1,6 @@
 const prisma = require('../config/database');
 const { OutboxService } = require('./outboxService');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 // Domain Events
 const DOMAIN_EVENTS = {

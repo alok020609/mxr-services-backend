@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class AdvancedAnalyticsService {
   // Real-time analytics dashboard
@@ -8,7 +8,7 @@ class AdvancedAnalyticsService {
     const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
     const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const [ordersLastHour, ordersLast24Hours, revenueLastHour, revenueLast24Hours, activeUsers] = await Promise.all([
+    const [ordersLastHour, ordersLast24Hours, revenueLastHour, revenueLast24Hours, activeUserSessions] = await Promise.all([
       prisma.order.count({
         where: {
           createdAt: { gte: lastHour },
@@ -35,12 +35,16 @@ class AdvancedAnalyticsService {
         },
         _sum: { total: true },
       }),
-      prisma.session.count({
+      prisma.session.groupBy({
+        by: ['userId'],
         where: {
-          lastActivityAt: { gte: lastHour },
+          createdAt: { gte: lastHour },
+          expiresAt: { gt: now },
         },
       }),
     ]);
+
+    const activeUsers = activeUserSessions.length;
 
     return {
       lastHour: {
@@ -66,7 +70,8 @@ class AdvancedAnalyticsService {
         user: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
           },
         },
@@ -85,7 +90,16 @@ class AdvancedAnalyticsService {
       take: 50,
     });
 
-    return orders;
+    // Format user name from firstName and lastName
+    return orders.map((order) => ({
+      ...order,
+      user: {
+        ...order.user,
+        name: order.user.firstName && order.user.lastName
+          ? `${order.user.firstName} ${order.user.lastName}`
+          : order.user.firstName || order.user.lastName || null,
+      },
+    }));
   }
 
   // Predictive analytics - Churn prediction

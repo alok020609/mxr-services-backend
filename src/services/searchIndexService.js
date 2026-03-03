@@ -1,6 +1,6 @@
 const prisma = require('../config/database');
 const { addIndexJob } = require('./jobQueueService');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class SearchIndexService {
   static async indexProduct(productId) {

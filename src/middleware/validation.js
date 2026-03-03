@@ -25,6 +25,7 @@ const validateRegister = validate(
     firstName: Joi.string().optional(),
     lastName: Joi.string().optional(),
     phone: Joi.string().optional(),
+    isAdmin: Joi.boolean().optional().default(false),
   })
 );
 
@@ -49,12 +50,29 @@ const validateChangePassword = validate(
   })
 );
 
+const validateResendVerification = validate(
+  Joi.object({
+    email: Joi.string().email().required(),
+  })
+);
+
+const validateSocialLogin = validate(
+  Joi.object({
+    idToken: Joi.string().trim().optional(),
+    id_token: Joi.string().trim().optional(),
+  }).or('idToken', 'id_token').messages({
+    'object.missing': 'Either idToken or id_token is required',
+  })
+);
+
 module.exports = {
   validate,
   validateRegister,
   validateLogin,
   validatePasswordReset,
   validateChangePassword,
+  validateResendVerification,
+  validateSocialLogin,
 };
 
 

@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class AdvancedInventoryService {
   // Calculate reorder point based on lead time and average demand

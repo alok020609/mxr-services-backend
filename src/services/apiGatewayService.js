@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 
 class APIGatewayService {
   // Get user's API tier
@@ -22,16 +22,14 @@ class APIGatewayService {
 
   // Get API usage statistics
   static async getAPIUsage(userId, startDate, endDate) {
-    const usage = await prisma.apiUsage.findMany({
+    const usage = await prisma.aPIUsage.groupBy({
+      by: ['endpoint'],
       where: {
         userId,
         createdAt: {
           gte: new Date(startDate),
           lte: new Date(endDate),
         },
-      },
-      groupBy: {
-        endpoint: true,
       },
       _count: {
         id: true,
@@ -43,7 +41,7 @@ class APIGatewayService {
 
   // Record API usage
   static async recordAPIUsage(userId, endpoint, method, responseTime, statusCode) {
-    await prisma.apiUsage.create({
+    await prisma.aPIUsage.create({
       data: {
         userId,
         endpoint,

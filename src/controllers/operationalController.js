@@ -53,6 +53,15 @@ const createImportJob = asyncHandler(async (req, res) => {
   });
 
   // TODO: Queue job for processing
+  // When implementing PRODUCT import processing, ensure all fields are handled:
+  // Required: name, price, sku
+  // Optional: description, slug, compareAtPrice, originalPrice, images, categoryId, badges,
+  //           specifications, certifications, warrantyInfo, returnPolicy, refundPolicy,
+  //           shippingPolicy, exchangePolicy, cancellationPolicy, careInstructions,
+  //           countryOfOrigin, manufacturerInfo, brand, modelNumber, weightDimensions,
+  //           minOrderQuantity, maxOrderQuantity
+  // JSON fields (returnPolicy, refundPolicy, shippingPolicy, exchangePolicy, cancellationPolicy,
+  //              manufacturerInfo, weightDimensions, specifications) should be parsed from JSON strings
 
   res.status(201).json({
     success: true,
@@ -104,6 +113,15 @@ const createExportJob = asyncHandler(async (req, res) => {
   });
 
   // TODO: Queue job for processing
+  // When implementing PRODUCT export processing, ensure all fields are included:
+  // Basic: id, name, description, slug, price, compareAtPrice, originalPrice, sku, images, categoryId, isActive
+  // Product info: badges, specifications, certifications, warrantyInfo
+  // Policies: returnPolicy, refundPolicy, shippingPolicy, exchangePolicy, cancellationPolicy
+  // Additional: careInstructions, countryOfOrigin, manufacturerInfo, brand, modelNumber
+  // Physical: weightDimensions
+  // Order limits: minOrderQuantity, maxOrderQuantity
+  // Timestamps: createdAt, updatedAt
+  // JSON fields should be stringified for CSV format
 
   res.status(201).json({
     success: true,
@@ -231,11 +249,84 @@ const getWebhookLogs = asyncHandler(async (req, res) => {
   });
 });
 
+// Enhanced Import Job Status
+const getImportJobStatus = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  const job = await prisma.importJob.findUnique({
+    where: { id: jobId },
+  });
+
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      error: 'Import job not found',
+    });
+  }
+
+  // TODO: Get real-time progress from job queue
+  res.json({
+    success: true,
+    data: {
+      jobId: job.id,
+      status: job.status,
+      progress: 0, // TODO: Calculate from processed/total
+      processed: 0,
+      total: 0,
+      successful: 0,
+      failed: 0,
+      errors: [],
+      startedAt: job.createdAt,
+      estimatedCompletion: null,
+    },
+  });
+});
+
+const getImportJobResult = asyncHandler(async (req, res) => {
+  const { jobId } = req.params;
+  
+  const job = await prisma.importJob.findUnique({
+    where: { id: jobId },
+  });
+
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      error: 'Import job not found',
+    });
+  }
+
+  if (job.status !== 'COMPLETED' && job.status !== 'FAILED') {
+    return res.status(422).json({
+      success: false,
+      error: 'Job is still processing',
+      code: 'JOB_NOT_COMPLETED',
+    });
+  }
+
+  // TODO: Get actual results from job processing
+  res.json({
+    success: true,
+    data: {
+      jobId: job.id,
+      status: job.status,
+      processed: 0,
+      successful: 0,
+      failed: 0,
+      resultFile: null, // TODO: Generate result file URL
+      errors: [],
+      completedAt: job.updatedAt,
+    },
+  });
+});
+
 module.exports = {
   bulkUpdateProducts,
   bulkUpdateOrders,
   createImportJob,
   getImportJobs,
+  getImportJobStatus,
+  getImportJobResult,
   createExportJob,
   getExportJobs,
   getCronJobs,

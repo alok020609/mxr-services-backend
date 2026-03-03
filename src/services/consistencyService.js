@@ -1,6 +1,6 @@
 const prisma = require('../config/database');
 const { acquireLock, releaseLock } = require('../utils/lock');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
 const { retry } = require('../utils/retry');
 
 /**
