@@ -34,12 +34,18 @@ wait_for_db() {
         error "DATABASE_URL environment variable is not set"
     fi
     
-    # Extract connection details from DATABASE_URL
-    # Format: postgresql://user:password@host:port/database
-    DB_HOST=$(echo "$DATABASE_URL" | sed -n 's/.*@\([^:]*\):.*/\1/p')
-    DB_PORT=$(echo "$DATABASE_URL" | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
+    # Extract connection details from DATABASE_URL (support postgres:// and postgresql://, with or without port)
+    # Strip optional ?query string
+    URL_NO_QUERY=$(echo "$DATABASE_URL" | sed 's/\?.*//')
+    # Part after @ is host or host:port
+    AFTER_AT=$(echo "$URL_NO_QUERY" | sed -n 's|.*@||p')
+    DB_HOST=$(echo "$AFTER_AT" | sed 's/[:/].*//')
+    DB_PORT=$(echo "$AFTER_AT" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
+    if [ -z "$DB_PORT" ]; then
+        DB_PORT=5432
+    fi
     
-    if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ]; then
+    if [ -z "$DB_HOST" ]; then
         warning "Could not parse DATABASE_URL, skipping connection check"
         return 0
     fi
@@ -81,11 +87,11 @@ run_migrations() {
         error "npx is not available. Cannot run migrations."
     fi
     
-    # Run migrations
+    # Run migrations (non-fatal: continue to start Node so we can see real errors)
     if npx prisma migrate deploy; then
         success "Database migrations completed successfully"
     else
-        error "Database migrations failed"
+        warning "Database migrations failed; starting app anyway"
     fi
 }
 
@@ -93,11 +99,15 @@ run_migrations() {
 main() {
     log "Starting application entrypoint..."
     
-    # Wait for database
-    wait_for_db
-    
-    # Run migrations
-    run_migrations
+    if [ "$SKIP_MIGRATE" = "1" ]; then
+        warning "SKIP_MIGRATE=1: skipping database wait and migrations"
+    else
+        # Wait for database
+        wait_for_db
+        
+        # Run migrations
+        run_migrations
+    fi
     
     # Start the application
     log "Starting Node.js application..."
