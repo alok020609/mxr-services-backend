@@ -448,12 +448,15 @@ const options = {
 };
 
 const swaggerSpec = swaggerJsdoc(options);
+if (!swaggerSpec.openapi) swaggerSpec.openapi = '3.0.0';
 
 function getSpecForRequest(req) {
   const base = req && req.protocol && req.get ? `${req.protocol}://${req.get('host')}` : defaultBaseUrl;
-  return Object.assign({}, swaggerSpec, {
+  const spec = Object.assign({}, swaggerSpec, {
     servers: [{ url: base, description: 'Current server' }],
   });
+  if (!spec.openapi) spec.openapi = '3.0.0';
+  return spec;
 }
 
 module.exports = swaggerSpec;

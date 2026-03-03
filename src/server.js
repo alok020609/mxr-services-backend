@@ -153,11 +153,10 @@ const staticFileCors = (req, res, next) => {
 // Apply CORS middleware before static file serving
 app.use('/uploads', staticFileCors, express.static(path.join(__dirname, '../uploads')));
 
-// Swagger documentation (spec per-request so "Try it out" uses current host when no APP_URL set)
+// Swagger documentation (use static spec so client receives valid openapi version; set APP_URL for production server URL)
 const swaggerUi = require('swagger-ui-express');
-const swaggerConfig = require('./config/swagger');
-const getSpecForRequest = swaggerConfig.getSpecForRequest || (() => swaggerConfig);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup((req, res, next) => getSpecForRequest(req), {
+const swaggerSpec = require('./config/swagger');
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   explorer: true,
   customCss: `
     .swagger-ui .topbar { display: none }
