@@ -194,6 +194,11 @@ app.get('/', (req, res) => {
   });
 });
 
+// Favicon: avoid 404 and error log when browsers request it
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
 // API routes
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
