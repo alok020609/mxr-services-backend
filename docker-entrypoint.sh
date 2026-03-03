@@ -35,8 +35,8 @@ wait_for_db() {
     fi
     
     # Extract connection details from DATABASE_URL (support postgres:// and postgresql://, with or without port)
-    # Strip optional ?query string
-    URL_NO_QUERY=$(echo "$DATABASE_URL" | sed 's/\?.*//')
+    # Strip optional ?query string (use [?] for portable literal ? in sed)
+    URL_NO_QUERY=$(echo "$DATABASE_URL" | sed 's/[?].*//')
     # Part after @ is host or host:port
     AFTER_AT=$(echo "$URL_NO_QUERY" | sed -n 's|.*@||p')
     DB_HOST=$(echo "$AFTER_AT" | sed 's/[:/].*//')
