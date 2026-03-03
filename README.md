@@ -147,6 +147,7 @@ NODE_ENV=development
 PORT=3000
 API_VERSION=v1
 FRONTEND_URL=http://localhost:3000
+# APP_URL: public URL of this API (e.g. https://your-app.onrender.com). Used by Swagger "Try it out" and links. Set in production.
 
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/ecommerce

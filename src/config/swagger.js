@@ -1,5 +1,13 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 
+const defaultBaseUrl = process.env.APP_URL || process.env.API_URL || process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`;
+const servers = [
+  { url: defaultBaseUrl, description: defaultBaseUrl.includes('localhost') ? 'Development server' : 'Current server' },
+];
+if (process.env.APP_URL || process.env.API_URL || process.env.PUBLIC_URL) {
+  servers.push({ url: `http://localhost:${process.env.PORT || 3000}`, description: 'Local' });
+}
+
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -15,16 +23,7 @@ const options = {
         name: 'ISC',
       },
     },
-    servers: [
-      {
-        url: `http://localhost:${process.env.PORT || 3000}`,
-        description: 'Development server',
-      },
-      {
-        url: 'https://api.ecommerce.com',
-        description: 'Production server',
-      },
-    ],
+    servers,
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -450,6 +449,14 @@ const options = {
 
 const swaggerSpec = swaggerJsdoc(options);
 
+function getSpecForRequest(req) {
+  const base = req && req.protocol && req.get ? `${req.protocol}://${req.get('host')}` : defaultBaseUrl;
+  return Object.assign({}, swaggerSpec, {
+    servers: [{ url: base, description: 'Current server' }],
+  });
+}
+
 module.exports = swaggerSpec;
+module.exports.getSpecForRequest = getSpecForRequest;
 
 
