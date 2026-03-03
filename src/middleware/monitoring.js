@@ -1,11 +1,14 @@
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger');
+
+// Safe logger: use console if logger failed to load (e.g. in some Docker/production setups)
+const log = logger && typeof logger.info === 'function' ? logger : console;
 
 const requestLogger = (req, res, next) => {
   const start = Date.now();
 
   res.on('finish', () => {
     const duration = Date.now() - start;
-    logger.info('HTTP Request', {
+    log.info('HTTP Request', {
       method: req.method,
       path: req.path,
       statusCode: res.statusCode,
@@ -26,7 +29,7 @@ const performanceMonitor = (req, res, next) => {
 
     // Log slow requests
     if (duration > 1000) {
-      logger.warn('Slow request detected', {
+      (log.warn || log.info).call(log, 'Slow request detected', {
         method: req.method,
         path: req.path,
         duration: `${duration}ms`,
@@ -40,8 +43,7 @@ const performanceMonitor = (req, res, next) => {
 };
 
 const errorTracker = (err, req, res, next) => {
-  // Log error
-  logger.error('Request error', {
+  (log.error || log.info).call(log, 'Request error', {
     error: err.message,
     stack: err.stack,
     method: req.method,
@@ -58,5 +60,3 @@ module.exports = {
   performanceMonitor,
   errorTracker,
 };
-
-
