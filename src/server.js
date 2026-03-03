@@ -2,6 +2,17 @@
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
+
+// Log uncaught errors so deploy logs show the real cause of exit 1
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[FATAL] unhandledRejection:', reason);
+  process.exit(1);
+});
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

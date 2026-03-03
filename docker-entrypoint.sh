@@ -109,9 +109,9 @@ main() {
         run_migrations
     fi
     
-    # Start the application (run without exec so we can log exit code on crash)
+    # Start the application (run without exec so we can log exit code on crash; 2>&1 so stderr is visible in logs)
     log "Starting Node.js application..."
-    node src/server.js
+    node src/server.js 2>&1
     EXIT_CODE=$?
     if [ "$EXIT_CODE" -ne 0 ]; then
         warning "Node.js application exited with code $EXIT_CODE"
