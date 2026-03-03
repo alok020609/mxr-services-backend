@@ -188,6 +188,8 @@ const updateProfile = asyncHandler(async (req, res) => {
 module.exports = {
   register,
   login,
+  loginWithGoogle,
+  loginWithMicrosoft,
   verifyEmail,
   resendVerification,
   forgotPassword,
