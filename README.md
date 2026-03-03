@@ -9,6 +9,7 @@ A production-ready, Dockerized e-commerce backend API built with Node.js, Expres
 - 🐳 **Docker Ready** - Complete Docker Compose configuration
 - ☁️ **Cloud Platform Support** - Pre-configured for Render and Railway
 - 🔒 **Secure by Default** - Auto-generated cryptographically secure secrets
+- ✔️ **Pre-deploy check** - Run `npm run validate:deploy` before pushing to catch missing modules and syntax errors (Docker build + load test)
 
 ### Core Features
 - ✅ **User Authentication & Authorization** - JWT-based auth, email verification, password reset
@@ -2210,6 +2211,9 @@ docker-compose logs -f
 ```bash
 docker-compose down
 ```
+
+### Pre-deploy validation
+Before pushing (e.g. to trigger a Render deploy), run `npm run validate:deploy` to build the Docker image and verify the app loads without MODULE_NOT_FOUND or syntax errors. Optionally use `npm run validate:load` (no Docker) to test with tracked files only.
 
 ## Development
 
