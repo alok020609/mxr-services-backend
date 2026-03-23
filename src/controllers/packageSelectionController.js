@@ -167,18 +167,25 @@ const submitPackageSelection = asyncHandler(async (req, res) => {
 
   // 1) Email confirmation to user (non-blocking)
   const userSubject = `MXR Services - Package Selection Confirmation: ${name}`;
-  IntegrationsService.sendEmail({
-    to: userEmail,
-    subject: userSubject,
-    text: fullMessageText,
-    html: fullMessageHtml,
-  }).catch((err) => {
+  try {
+    await IntegrationsService.sendEmail({
+      to: userEmail,
+      subject: userSubject,
+      text: fullMessageText,
+      html: fullMessageHtml,
+    });
+  } catch (err) {
     logger.error('Failed to send package selection confirmation email', {
       userEmail,
       submissionId: submission.id,
       error: err.message,
     });
-  });
+    return res.status(502).json({
+      success: false,
+      error: 'Package selection saved, but confirmation email could not be sent. Please try again.',
+      data: { id: submission.id, createdAt: submission.createdAt },
+    });
+  }
 
   // 2) Notify internal team/admin email (non-blocking)
   mailSettingsService

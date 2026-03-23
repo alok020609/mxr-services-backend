@@ -17,7 +17,10 @@ const getEnvTransporter = () => {
   if (envTransporter) return envTransporter;
   if (!isSMTPConfigured()) return null;
   const port = parseInt(process.env.SMTP_PORT, 10);
-  const useSSL = port === 465;
+  const useSSL =
+    process.env.SMTP_SECURE != null
+      ? String(process.env.SMTP_SECURE).toLowerCase() === 'true'
+      : port === 465;
   envTransporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
@@ -35,11 +38,17 @@ const getEnvTransporter = () => {
 };
 
 /**
- * Get email transporter and from address. Uses admin panel SMTP (EmailService) when
- * configured; otherwise falls back to env SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS).
+ * Get email transporter and from address.
+ * Priority: env SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) first,
+ * then admin panel SMTP (EmailService) as fallback.
  * @returns {Promise<{ transporter: object, from: string } | null>}
  */
 const getTransporter = async () => {
+  if (isSMTPConfigured()) {
+    const t = getEnvTransporter();
+    return t ? { transporter: t, from: process.env.SMTP_FROM || process.env.SMTP_USER } : null;
+  }
+
   try {
     const prisma = require('../config/database');
     const emailService = await prisma.emailService.findFirst({
@@ -61,10 +70,6 @@ const getTransporter = async () => {
     }
   } catch (err) {
     logger.warn('Could not load SMTP from admin EmailService:', err.message);
-  }
-  if (isSMTPConfigured()) {
-    const t = getEnvTransporter();
-    return t ? { transporter: t, from: process.env.SMTP_FROM || process.env.SMTP_USER } : null;
   }
   return null;
 };

@@ -83,24 +83,16 @@ class IntegrationsService {
   static async sendEmail({ to, subject, text, html, cc, bcc, attachments }) {
     let emailService = null;
 
-    // Try to get active email service from database
-    try {
-      emailService = await AdminEmailServiceService.getActiveEmailService();
-    } catch (error) {
-      logger.warn('Could not get email service from database, falling back to env vars:', error.message);
-    }
-
     let transporter = null;
     let fromAddress = null;
 
-    // Fall back to environment variables if no service configured
-    if (!emailService) {
-      if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        throw new Error('Email service not configured. Please configure email service in admin panel or set SMTP environment variables.');
-      }
-
+    // Priority 1: Use environment SMTP values when present
+    if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS) {
       const port = parseInt(process.env.SMTP_PORT, 10);
-      const useSSL = port === 465;
+      const useSSL =
+        process.env.SMTP_SECURE != null
+          ? String(process.env.SMTP_SECURE).toLowerCase() === 'true'
+          : port === 465;
 
       transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
@@ -114,6 +106,17 @@ class IntegrationsService {
 
       fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER;
     } else {
+      // Priority 2: fall back to active email service from database
+      try {
+        emailService = await AdminEmailServiceService.getActiveEmailService();
+      } catch (error) {
+        logger.warn('Could not get email service from database, and env SMTP is missing:', error.message);
+      }
+
+      if (!emailService) {
+        throw new Error('Email service not configured. Set env SMTP values or configure email service in admin panel.');
+      }
+
       // Use configured email service
       const config = emailService.config;
 
