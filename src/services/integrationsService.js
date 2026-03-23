@@ -120,7 +120,8 @@ class IntegrationsService {
       switch (emailService.type) {
         case 'SMTP':
           const port = config.port || 587;
-          const useSSL = port === 465;
+          // Respect admin-configured secure flag (Zoho often requires STARTTLS on 587)
+          const useSSL = typeof config.secure === 'boolean' ? config.secure : port === 465;
 
           transporter = nodemailer.createTransport({
             host: config.host,
