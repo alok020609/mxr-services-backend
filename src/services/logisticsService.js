@@ -89,7 +89,7 @@ class LogisticsService {
     // Get order details
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true, service: true, package: true } } },
     });
 
     if (!order) {
@@ -122,8 +122,8 @@ class LogisticsService {
       pickup: shipmentData.pickup || order.shippingAddress,
       delivery: shipmentData.delivery || order.shippingAddress,
       items: order.items.map(item => ({
-        name: item.product.name,
-        sku: item.product.sku || item.productId,
+        name: item.package?.name || item.service?.name || item.product?.name || 'Item',
+        sku: item.package?.slug || item.service?.slug || item.product?.sku || item.productId || item.packageId || item.serviceId,
         quantity: item.quantity,
         price: parseFloat(item.price),
       })),
@@ -245,7 +245,7 @@ class LogisticsService {
   static async handleReturn(orderId, returnData) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: { include: { product: true } } },
+      include: { items: { include: { product: true, service: true, package: true } } },
     });
 
     if (!order) {
@@ -272,8 +272,8 @@ class LogisticsService {
       pickup: returnData.pickup || order.shippingAddress,
       delivery: returnData.delivery || order.shippingAddress,
       items: returnData.items || order.items.map(item => ({
-        name: item.product.name,
-        sku: item.product.sku || item.productId,
+        name: item.package?.name || item.service?.name || item.product?.name || 'Item',
+        sku: item.package?.slug || item.service?.slug || item.product?.sku || item.productId || item.packageId || item.serviceId,
         quantity: item.quantity,
         price: parseFloat(item.price),
       })),

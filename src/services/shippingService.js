@@ -26,8 +26,10 @@ const calculateShipping = async (address, items) => {
   // Calculate total weight (simplified - would need product weight)
   const totalWeight = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = items.reduce((sum, item) => {
-    const price = item.variant?.price || item.product.price;
-    return sum + price * item.quantity;
+    const price = item.price != null
+      ? Number(item.price)
+      : (item.variant?.price != null ? item.variant.price : item.product?.price ?? item.service?.price);
+    return sum + (price != null ? Number(price) : 0) * item.quantity;
   }, 0);
 
   // Find matching rate

@@ -42,6 +42,7 @@ const getOrders = asyncHandler(async (req, res) => {
             },
             variant: true,
             service: true,
+            package: true,
           },
         },
         payments: {
@@ -83,6 +84,7 @@ const getOrder = asyncHandler(async (req, res) => {
           product: true,
           variant: true,
           service: true,
+          package: true,
         },
       },
       payments: {

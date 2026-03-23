@@ -213,6 +213,7 @@ app.get('/favicon.ico', (req, res) => {
 // API routes
 const authRoutes = require('./routes/authRoutes');
 const productRoutes = require('./routes/productRoutes');
+const packageRoutes = require('./routes/packageRoutes');
 const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -282,6 +283,7 @@ const adminServiceRoutes = requireOptional('./routes/admin/adminServiceRoutes');
 const apiVersion = process.env.API_VERSION || 'v1';
 app.use(`/api/${apiVersion}/auth`, authRoutes);
 app.use(`/api/${apiVersion}/products`, productRoutes);
+app.use(`/api/${apiVersion}/packages`, packageRoutes);
 if (serviceRoutes) app.use(`/api/${apiVersion}/services`, serviceRoutes);
 app.use(`/api/${apiVersion}/cart`, cartRoutes);
 app.use(`/api/${apiVersion}/orders`, orderRoutes);

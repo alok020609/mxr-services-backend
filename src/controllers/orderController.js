@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const logger = require('../utils/logger');
 const mailSettingsService = require('../services/mailSettingsService');
 const orderConfirmationEmailService = require('../services/orderConfirmationEmailService');
+const packagePricingService = require('../services/packagePricingService');
 
 const generateOrderNumber = () => {
   return `ORD-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
@@ -39,7 +40,7 @@ const createOrder = asyncHandler(async (req, res) => {
   const { shippingAddressId, billingAddressId, couponCode, paymentMethod: paymentMethodRaw } = req.body;
   const gateway = resolvePaymentGateway(paymentMethodRaw);
 
-  // Get cart
+  // Get cart (include product, variant, service, package for price resolution)
   const cart = await prisma.cart.findUnique({
     where: { userId: req.user.id },
     include: {
@@ -47,6 +48,8 @@ const createOrder = asyncHandler(async (req, res) => {
         include: {
           product: true,
           variant: true,
+          service: true,
+          package: true,
         },
       },
     },
@@ -56,6 +59,16 @@ const createOrder = asyncHandler(async (req, res) => {
     return res.status(400).json({
       success: false,
       error: 'Cart is empty',
+    });
+  }
+
+  const hasValidItem = cart.items.some(
+    (i) => i.productId != null || i.serviceId != null || i.packageId != null
+  );
+  if (!hasValidItem) {
+    return res.status(400).json({
+      success: false,
+      error: 'Cart has no valid items',
     });
   }
 
@@ -83,10 +96,11 @@ const createOrder = asyncHandler(async (req, res) => {
     });
   }
 
-  // Stock check: ensure every cart item has sufficient stock
+  // Stock check: only for product/variant items
   for (const item of cart.items) {
-    const available = item.variant != null ? item.variant.stock : item.product.stock;
-    if (available < item.quantity) {
+    if (item.productId == null) continue;
+    const available = item.variant != null ? item.variant.stock : item.product?.stock;
+    if (available != null && available < item.quantity) {
       return res.status(400).json({
         success: false,
         error: 'Insufficient stock for one or more items',
@@ -94,22 +108,57 @@ const createOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  // Calculate totals
+  // Calculate totals and build order items (product, service, or package)
   let subtotal = 0;
   const orderItems = [];
 
   for (const item of cart.items) {
-    const price = item.variant?.price || item.product.price;
-    const total = price * item.quantity;
-    subtotal += total;
-
-    orderItems.push({
-      productId: item.productId,
-      variantId: item.variantId,
+    let price;
+    let total;
+    const baseItem = {
       quantity: item.quantity,
-      price,
-      total,
-    });
+      productId: null,
+      variantId: null,
+      serviceId: null,
+      packageId: null,
+      packageCustomizationSnapshot: null,
+    };
+
+    if (item.packageId) {
+      const customization = (item.packageCustomization && typeof item.packageCustomization === 'object')
+        ? item.packageCustomization
+        : {};
+      const computed = await packagePricingService.computePackagePrice(item.packageId, customization);
+      price = computed.price;
+      total = price * item.quantity;
+      orderItems.push({
+        ...baseItem,
+        packageId: item.packageId,
+        packageCustomizationSnapshot: customization,
+        price,
+        total,
+      });
+    } else if (item.serviceId) {
+      price = Number(item.service.price);
+      total = price * item.quantity;
+      orderItems.push({
+        ...baseItem,
+        serviceId: item.serviceId,
+        price,
+        total,
+      });
+    } else {
+      price = Number(item.variant?.price ?? item.product?.price ?? 0);
+      total = price * item.quantity;
+      orderItems.push({
+        ...baseItem,
+        productId: item.productId,
+        variantId: item.variantId,
+        price,
+        total,
+      });
+    }
+    subtotal += total;
   }
 
   // Apply coupon if provided
@@ -197,6 +246,8 @@ const createOrder = asyncHandler(async (req, res) => {
           include: {
             product: true,
             variant: true,
+            service: true,
+            package: true,
           },
         },
         payments: true,
@@ -204,6 +255,7 @@ const createOrder = asyncHandler(async (req, res) => {
     });
 
     for (const item of cart.items) {
+      if (item.productId == null) continue;
       const qty = item.quantity;
       if (item.variantId) {
         await tx.productVariant.update({
@@ -325,6 +377,8 @@ const getOrder = asyncHandler(async (req, res) => {
         include: {
           product: true,
           variant: true,
+          service: true,
+          package: true,
         },
       },
       payments: {

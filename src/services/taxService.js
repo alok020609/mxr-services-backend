@@ -9,8 +9,10 @@ const calculateTax = async (address, items) => {
   const appliedRules = [];
 
   for (const item of items) {
-    const price = item.variant?.price || item.product.price;
-    const itemTotal = price * item.quantity;
+    const price = item.price != null
+      ? Number(item.price)
+      : (item.variant?.price != null ? item.variant.price : item.product?.price ?? item.service?.price);
+    const itemTotal = (price != null ? Number(price) : 0) * item.quantity;
 
     for (const rule of taxRules) {
       // Check if rule applies

@@ -18,6 +18,7 @@ Authorization: Bearer <jwt_token>
 0. [Health Check](#0-health-check)
 1. [Authentication & User Management](#1-authentication--user-management)
 2. [Product Management](#product-management)
+2.1. [Package Management](#21-package-management)
 3. [Shopping Cart](#shopping-cart)
 3.1. [Services](#31-services)
 4. [Orders](#orders)
@@ -2576,15 +2577,434 @@ Validation error - missing or invalid query parameter
 
 ---
 
+## 2.1 Package Management
+
+Package Management provides configurable **packages** (e.g. CCTV plans, solar kits) with a **taxonomy** (industry → segment → subcategory) and **customization options** that affect price. Packages can be used for any industry; taxonomy and options are admin-configurable.
+
+**Base path**: `/api/v1/packages`
+
+### Taxonomy (configurable segments / subcategories)
+
+#### GET /api/v1/packages/taxonomy
+
+Get taxonomy tree or flat list. Used to build segment/subcategory filters (e.g. Home, Office, Industrial or custom verticals).
+
+**Permissions**: Public
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| parentId | string | Optional. Return only children of this node (use empty or `null` for roots). |
+| flat | string | Optional. `"true"` for flat list; otherwise returns nested tree. |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "tax_xxx",
+      "name": "Home",
+      "slug": "home",
+      "level": 1,
+      "parentId": "tax_parent",
+      "sortOrder": 0,
+      "isActive": true,
+      "metadata": null,
+      "children": []
+    }
+  ]
+}
+```
+
+---
+
+#### GET /api/v1/packages/taxonomy/:id
+
+Get a single taxonomy node with parent and children.
+
+**Permissions**: Public
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "tax_xxx",
+    "name": "Home",
+    "slug": "home",
+    "level": 1,
+    "parentId": "tax_parent",
+    "sortOrder": 0,
+    "isActive": true,
+    "parent": { ... },
+    "children": [ ... ],
+    "_count": { "packages": 4 }
+  }
+}
+```
+
+**404 Not Found** – Taxonomy node not found.
+
+---
+
+#### POST /api/v1/packages/taxonomy
+
+Create a taxonomy node (industry, segment, or subcategory).
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Display name (e.g. "Home", "Office"). |
+| slug | string | No | URL-friendly slug; auto-generated from name if omitted. |
+| level | integer | No | Depth level (0 = root/industry, 1 = segment, etc.). Default 0. |
+| parentId | string | No | Parent node ID; omit or null for root. |
+| sortOrder | integer | No | Display order. Default 0. |
+| metadata | object | No | Optional industry-specific data. |
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "tax_xxx",
+    "name": "Home",
+    "slug": "home",
+    "level": 1,
+    "parentId": "tax_parent",
+    "sortOrder": 0,
+    "isActive": true,
+    "createdAt": "...",
+    "updatedAt": "..."
+  }
+}
+```
+
+---
+
+#### PUT /api/v1/packages/taxonomy/:id
+
+Update a taxonomy node.
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):** Same fields as POST (all optional).
+
+**Response (200 OK):** `{ "success": true, "data": <updated taxonomy node> }`
+
+---
+
+#### DELETE /api/v1/packages/taxonomy/:id
+
+Delete a taxonomy node (cascades to children if applicable).
+
+**Permissions**: Admin (Bearer token required)
+
+**Response (200 OK):** `{ "success": true, "message": "Taxonomy node deleted" }`
+
+---
+
+### Packages
+
+#### GET /api/v1/packages
+
+List packages with optional filters. Returns only active packages by default; admin can pass `isActive=false` to include inactive.
+
+**Permissions**: Public (read); active-only by default.
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| page | integer | Page number. Default 1. |
+| limit | integer | Items per page. Default 20. |
+| taxonomyId | string | Filter by taxonomy node ID (segment/subcategory). |
+| segmentId | string | Alias for taxonomyId. |
+| isActive | string | `"true"` or `"false"`. Default `"true"`. |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "pkg_xxx",
+      "name": "Starter Setup",
+      "slug": "starter-setup",
+      "description": "...",
+      "basePrice": "12999.00",
+      "defaultFeatures": ["2x 2.4 MP HD Cameras", "500 GB Storage", "..."],
+      "isPopular": false,
+      "isActive": true,
+      "taxonomyId": "tax_xxx",
+      "categoryId": null,
+      "taxonomy": { "id": "tax_xxx", "name": "Small Homes", "slug": "small-homes" },
+      "category": null,
+      "options": [
+        {
+          "id": "opt_xxx",
+          "key": "camera_count",
+          "label": "Number of cameras",
+          "type": "NUMBER",
+          "config": { "min": 2, "max": 8, "step": 1, "default": 2, "pricePerUnit": 1500 },
+          "sortOrder": 0,
+          "isRequired": true
+        }
+      ]
+    }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 12, "pages": 1 }
+}
+```
+
+---
+
+#### GET /api/v1/packages/slug/:slug
+
+Get a package by slug.
+
+**Permissions**: Public
+
+**Response (200 OK):** `{ "success": true, "data": <package with taxonomy, category, options> }`
+
+**404 Not Found** – Package not found or inactive.
+
+---
+
+#### GET /api/v1/packages/:id
+
+Get a package by ID.
+
+**Permissions**: Public
+
+**Response (200 OK):** `{ "success": true, "data": <package with taxonomy, category, options> }`
+
+**404 Not Found** – Package not found.
+
+---
+
+#### POST /api/v1/packages/:id/calculate-price
+
+Calculate the price for a package with given customization (e.g. for live UI updates).
+
+**Permissions**: Public
+
+**Request Body (application/json):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| customization | object | No | Key-value map of option keys to chosen values. Can also send keys at top level. |
+
+Example:
+```json
+{
+  "customization": {
+    "camera_count": 4,
+    "camera_type": "5MP",
+    "storage": "1TB",
+    "ups": true
+  }
+}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| includeBreakdown | string | `"true"` to include per-option price deltas in response. |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "price": 18999.50,
+  "breakdown": [
+    { "key": "camera_count", "label": "Number of cameras", "delta": 3000 },
+    { "key": "camera_type", "label": "Camera type", "delta": 500 }
+  ]
+}
+```
+
+**400 Bad Request** – Invalid customization (e.g. invalid option values):
+```json
+{
+  "success": false,
+  "error": "Invalid customization: ..."
+}
+```
+
+---
+
+#### GET /api/v1/packages/:id/options
+
+List customization options for a package.
+
+**Permissions**: Public
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "opt_xxx",
+      "packageId": "pkg_xxx",
+      "key": "camera_count",
+      "label": "Number of cameras",
+      "type": "NUMBER",
+      "config": { "min": 2, "max": 8, "step": 1, "default": 2, "pricePerUnit": 1500 },
+      "sortOrder": 0,
+      "isRequired": true,
+      "isActive": true
+    }
+  ]
+}
+```
+
+**Option types and config:**
+
+- **NUMBER**: `config`: `{ min, max, step?, default?, pricePerUnit? }` – e.g. camera count; price delta = (value - base) × pricePerUnit.
+- **SELECT**: `config`: `{ options: [ { value, label, priceDelta? } ], default? }` – e.g. camera type.
+- **BOOLEAN**: `config`: `{ priceWhenTrue? }` – e.g. UPS add-on.
+
+---
+
+#### POST /api/v1/packages
+
+Create a package (admin).
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| name | string | Yes | Package name (e.g. "Starter Setup"). |
+| slug | string | No | Auto-generated from name if omitted. |
+| description | string | No | Description text. |
+| basePrice | number | Yes | Base price (decimal). |
+| defaultFeatures | array | No | Array of feature strings. Default `[]`. |
+| isPopular | boolean | No | Default false. |
+| isActive | boolean | No | Default true. |
+| taxonomyId | string | No | Taxonomy node ID (segment/subcategory). |
+| categoryId | string | No | Optional Category ID from main catalog. |
+
+**Response (201 Created):** `{ "success": true, "data": <package with taxonomy, category, options> }`
+
+---
+
+#### PUT /api/v1/packages/:id
+
+Update a package (admin).
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):** Same fields as POST (all optional).
+
+**Response (200 OK):** `{ "success": true, "data": <updated package> }`
+
+---
+
+#### DELETE /api/v1/packages/:id
+
+Deactivate a package (soft delete: sets `isActive: false`).
+
+**Permissions**: Admin (Bearer token required)
+
+**Response (200 OK):** `{ "success": true, "message": "Package deactivated" }`
+
+---
+
+#### POST /api/v1/packages/:id/options
+
+Create a package option (admin).
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| key | string | Yes | Option key (e.g. `camera_count`, `camera_type`, `storage`, `ups`). |
+| label | string | No | Display label; defaults to key. |
+| type | string | Yes | One of: `NUMBER`, `SELECT`, `BOOLEAN`. |
+| config | object | No | Schema depends on type (see GET options above). Default `{}`. |
+| sortOrder | integer | No | Display order. Default 0. |
+| isRequired | boolean | No | Default false. |
+
+**Response (201 Created):** `{ "success": true, "data": <package option> }`
+
+---
+
+#### PUT /api/v1/packages/:id/options/:optionId
+
+Update a package option (admin).
+
+**Permissions**: Admin (Bearer token required)
+
+**Request Body (application/json):** Same as POST options (all optional). Can include `isActive`.
+
+**Response (200 OK):** `{ "success": true, "data": <updated option> }`
+
+---
+
+#### DELETE /api/v1/packages/:id/options/:optionId
+
+Delete a package option (admin).
+
+**Permissions**: Admin (Bearer token required)
+
+**Response (200 OK):** `{ "success": true, "message": "Option deleted" }`
+
+---
+
+### POST /api/v1/packages/selection
+
+Package selection fallback (no customization)
+
+Submit the selected package JSON from the frontend when you don't want to use the dynamic/customizable packages flow yet. The backend saves it as a lead and emails the logged-in user (and internal team if configured).
+
+**Permissions**: Authenticated (Bearer token required)
+
+**Request Body (application/json)**:
+```json
+{
+  "category": "Small Homes",
+  "name": "Starter Setup",
+  "price": "12,999",
+  "isPopular": false,
+  "features": ["..."]
+}
+```
+
+**Response (201 Created)**:
+```json
+{
+  "success": true,
+  "data": { "id": "contact_submission_id", "createdAt": "..." },
+  "message": "Package selection received. Our team will contact you shortly."
+}
+```
+
+---
+
 ## 3. Shopping Cart
 
-The cart can contain **product lines** and **service lines** (see [Services](#31-services)). Checkout creates one order with one combined payment for all items.
+The cart can contain **product lines**, **service lines**, and **package lines** (see [Services](#31-services) and [Package Management](#21-package-management)). Checkout creates one order with one combined payment for all items. Package lines include a computed `lineTotal`; product/service lines use stored or variant price.
 
 ### GET /api/v1/cart/
 
 Get current user's cart
 
-Retrieve the authenticated user's shopping cart with all items. Each cart item is either a **product** line (`productId`, `variantId?`, `product`, `variant`) or a **service** line (`serviceId`, `service`). Use `item.product` or `item.service` to render and compute line price.
+Retrieve the authenticated user's shopping cart with all items. Each cart item is one of:
+
+- **Product line**: `productId`, `variantId?`, `product`, `variant` – use `item.product` / `item.variant` for price.
+- **Service line**: `serviceId`, `service` – use `item.service.price`.
+- **Package line**: `packageId`, `packageCustomization`, `package` (with `options`, `taxonomy`) – use `item.lineTotal` (computed from package base price + option deltas).
 
 **Permissions**: Authenticated (Bearer token required)
 
@@ -2628,30 +3048,61 @@ Retrieve the authenticated user's shopping cart with all items. Each cart item i
 
 Add item to cart
 
-Add a **product** or a **service** to the user's shopping cart. Send exactly one of `productId` or `serviceId`.
+Add a **product**, **service**, or **package** to the user's shopping cart. Send exactly one of `productId`, `serviceId`, or `packageId`.
 
 **Permissions**: Authenticated (Bearer token required)
 
 **Request Body (application/json):**
 
-- **To add a product:** send `productId` (required), `quantity` (required, min 1), and optionally `variantId`.
-- **To add a service:** send `serviceId` (required) and `quantity` (optional, default 1).
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| productId | string | No* | Product ID (use with product lines). |
+| variantId | string | No | Variant ID when adding a product variant. |
+| serviceId | string | No* | Service ID (use with service lines). |
+| packageId | string | No* | Package ID (use with package lines). |
+| quantity | integer | Yes | Quantity; min 1. Default 1. |
+| customization | object | No | For **package** lines only. Key-value map of option keys to chosen values (e.g. `camera_count`, `camera_type`, `storage`, `ups`). Must be valid per package options. |
 
+*Exactly one of `productId`, `serviceId`, or `packageId` is required.
+
+**Examples:**
+
+Add a product (optional variant):
 ```json
 { "productId": "prod_abc", "variantId": "var_xyz", "quantity": 2 }
 ```
-or
+
+Add a service:
 ```json
 { "serviceId": "svc_123", "quantity": 1 }
 ```
 
-**Response (200 OK or 201 Created):** `{ "success": true, "data": <cartItem> }` with `product`, `variant`, and/or `service` included on the item.
+Add a package with customization:
+```json
+{
+  "packageId": "pkg_xxx",
+  "quantity": 1,
+  "customization": {
+    "camera_count": 4,
+    "camera_type": "5MP",
+    "storage": "1TB",
+    "ups": true
+  }
+}
+```
+
+**Response (200 OK):** `{ "success": true, "data": <cart> }` – cart includes `items` with `product`, `variant`, `service`, or `package` and computed `lineTotal` for each item.
 
 **Error Responses:**
 
-**400 Bad Request** - Exactly one of productId or serviceId is required
+**400 Bad Request** – Missing or invalid body (e.g. none or multiple of productId/serviceId/packageId)
 ```json
-{ "success": false, "error": "Exactly one of productId or serviceId is required" }
+{ "success": false, "error": "productId, serviceId, or packageId is required" }
+```
+
+**400 Bad Request** – Invalid package customization
+```json
+{ "success": false, "error": "Invalid customization", "errors": ["Missing required option: ...", "..."] }
 ```
 
 **404 Not Found** - Product or service not found
@@ -2670,18 +3121,22 @@ or
 }
 ```
 
-**422 Unprocessable Entity** - Insufficient stock (product only)
-```json
-{ "success": false, "error": "Insufficient stock available" }
-```
-
-**404 Not Found** - Product or service not found
+**404 Not Found** – Product, service, or package not found
 ```json
 { "success": false, "error": "Product not found" }
 ```
 or
 ```json
 { "success": false, "error": "Service not found" }
+```
+or
+```json
+{ "success": false, "error": "Package not found" }
+```
+
+**422 Unprocessable Entity** – Insufficient stock (product only)
+```json
+{ "success": false, "error": "Insufficient stock available" }
 ```
 
 **500 Internal Server Error**
@@ -2696,9 +3151,16 @@ or
 
 ### PUT /api/v1/cart/update/:itemId
 
-Unauthorized - No token provided or invalid token
+Update cart item quantity and, for **package** items, optionally update customization.
 
-**Permissions**: Public
+**Permissions**: Authenticated (Bearer token required)
+
+**Request Body (application/json):**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| quantity | integer | Yes | New quantity; min 1. |
+| customization | object | No | For **package** items only. New option key-value map; validated against package options. |
 
 **Error Responses:**
 
@@ -2922,7 +3384,7 @@ Get a single service by ID.
 
 ## 4. Orders
 
-Order management endpoints. All require authentication (Bearer token). Orders can contain **product lines** and **service lines** (combined checkout). One order has one total and one payment for all lines.
+Order management endpoints. All require authentication (Bearer token). Orders can contain **product lines**, **service lines**, and **package lines** (combined checkout). One order has one total and one payment for all lines. Order item responses include `product`, `variant`, `service`, or `package` and, for package items, `packageCustomizationSnapshot`.
 
 ---
 
@@ -2930,7 +3392,7 @@ Order management endpoints. All require authentication (Bearer token). Orders ca
 
 Create order from cart
 
-Create a new order from the user's current shopping cart. The cart may contain **products only**, **services only**, or **both**. One order is created with one combined total and one payment for all lines. Stock is decremented only for product items; service lines do not affect inventory. The authenticated user's **email must be verified** (`emailVerified === true`); otherwise the API returns 403.
+Create a new order from the user's current shopping cart. The cart may contain **products**, **services**, and/or **packages**. One order is created with one combined total and one payment for all lines. Stock is decremented only for product/variant items; service and package lines do not affect inventory. Order items include: `productId`/`variantId` for product lines, `serviceId` for service lines, and `packageId` with `packageCustomizationSnapshot` for package lines (price is computed at checkout and stored on the order item). The authenticated user's **email must be verified** (`emailVerified === true`); otherwise the API returns 403.
 
 **Permissions**: Authenticated (Bearer token required); user must have verified email
 

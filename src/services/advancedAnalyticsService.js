@@ -185,7 +185,7 @@ class AdvancedAnalyticsService {
 
     userOrders.forEach((order) => {
       order.items.forEach((item) => {
-        if (item.product.categoryId) {
+        if (item.product?.categoryId) {
           userCategories.add(item.product.categoryId);
         }
       });
@@ -242,7 +242,7 @@ class AdvancedAnalyticsService {
     const userCategories = new Set();
     userOrders.forEach((order) => {
       order.items.forEach((item) => {
-        if (item.product.categoryId) {
+        if (item.product?.categoryId) {
           userCategories.add(item.product.categoryId);
         }
       });

@@ -103,6 +103,12 @@ enum ServiceType {
   INSTALLATION
 }
 
+enum PackageOptionType {
+  NUMBER
+  SELECT
+  BOOLEAN
+}
+
 enum NotificationType {
   ORDER
   PAYMENT
@@ -332,6 +338,7 @@ model Category {
   children    Category[] @relation("CategoryTree")
   products    Product[]
   services    Service[]
+  packages    Package[]
   translations Translation[] @relation("TranslationCategory")
   tenant      Tenant?   @relation(fields: [tenantId], references: [id])
 
@@ -448,6 +455,76 @@ model Service {
   @@index([tenantId])
 }
 
+// Configurable taxonomy for packages (industry -> segment -> subcategory; any depth)
+model PackageTaxonomy {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  level     Int      @default(0) // 0=industry/root, 1=segment, 2=subcategory, etc.
+  parentId  String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  metadata  Json?    // optional industry-specific data
+  tenantId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   PackageTaxonomy?  @relation("TaxonomyTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children PackageTaxonomy[] @relation("TaxonomyTree")
+  packages Package[]
+
+  @@unique([slug, parentId])
+  @@index([parentId])
+  @@index([tenantId])
+  @@index([isActive])
+}
+
+model Package {
+  id               String    @id @default(cuid())
+  name             String
+  slug             String    @unique
+  description      String?   @db.Text
+  basePrice        Decimal   @db.Decimal(10, 2)
+  defaultFeatures  Json?     @default("[]") // array of feature strings
+  isPopular        Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  taxonomyId       String?
+  categoryId       String?   // optional link to Category tree
+  tenantId         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  taxonomy  PackageTaxonomy? @relation(fields: [taxonomyId], references: [id], onDelete: SetNull)
+  category  Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  options   PackageOption[]
+  cartItems CartItem[]
+  orderItems OrderItem[]
+
+  @@index([slug])
+  @@index([taxonomyId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([tenantId])
+}
+
+model PackageOption {
+  id         String            @id @default(cuid())
+  packageId  String
+  key        String            // e.g. camera_count, camera_type, storage, ups
+  label      String
+  type       PackageOptionType
+  config     Json              // NUMBER: {min,max,step,default?,pricePerUnit?}; SELECT: {options:[{value,label,priceDelta?}],default?}; BOOLEAN: {priceWhenTrue?}
+  sortOrder  Int               @default(0)
+  isRequired Boolean          @default(false)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+}
+
 model ProductVariant {
   id          String    @id @default(cuid())
   productId   String
@@ -488,23 +565,27 @@ model Cart {
 }
 
 model CartItem {
-  id          String         @id @default(cuid())
-  cartId      String
-  productId   String?
-  variantId   String?
-  serviceId   String?
-  quantity   Int
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                   String         @id @default(cuid())
+  cartId               String
+  productId            String?
+  variantId            String?
+  serviceId            String?
+  packageId            String?
+  packageCustomization Json?           // e.g. { camera_count: 4, camera_type: "5MP", storage: "1TB", ups: true }
+  quantity             Int
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  cart        Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product     Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variant     ProductVariant? @relation(fields: [variantId], references: [id])
-  service     Service?       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  cart     Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product  Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant  ProductVariant? @relation(fields: [variantId], references: [id])
+  service  Service?       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  package  Package?       @relation(fields: [packageId], references: [id], onDelete: Cascade)
 
   @@index([cartId])
   @@index([productId])
   @@index([serviceId])
+  @@index([packageId])
 }
 
 model Order {
@@ -558,25 +639,29 @@ model Order {
 }
 
 model OrderItem {
-  id          String    @id @default(cuid())
-  orderId     String
-  productId   String?
-  variantId   String?
-  serviceId   String?
-  quantity   Int
-  price      Decimal   @db.Decimal(10, 2)
-  total      Decimal   @db.Decimal(10, 2)
-  createdAt  DateTime  @default(now())
+  id                        String    @id @default(cuid())
+  orderId                   String
+  productId                 String?
+  variantId                 String?
+  serviceId                 String?
+  packageId                 String?
+  packageCustomizationSnapshot Json?  // snapshot at order time
+  quantity                  Int
+  price                     Decimal   @db.Decimal(10, 2)
+  total                     Decimal   @db.Decimal(10, 2)
+  createdAt                 DateTime  @default(now())
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product     Product?  @relation(fields: [productId], references: [id])
   variant     ProductVariant? @relation(fields: [variantId], references: [id])
   service     Service?  @relation(fields: [serviceId], references: [id])
+  package     Package?   @relation(fields: [packageId], references: [id])
   customizations CustomizationValue[]
 
   @@index([orderId])
   @@index([productId])
   @@index([serviceId])
+  @@index([packageId])
 }
 
 model Payment {

@@ -78,7 +78,7 @@ async function sendInvoiceEmail(invoiceId, options = {}) {
     htmlBody += '<p><strong>Order summary:</strong></p><ul>';
     textBody += '\nOrder summary:\n';
     for (const item of order.items) {
-      const name = item.product?.name || 'Item';
+      const name = item.package?.name || item.service?.name || item.product?.name || 'Item';
       htmlBody += `<li>${name} × ${item.quantity} — ${item.total}</li>`;
       textBody += `- ${name} x ${item.quantity} - ${item.total}\n`;
     }

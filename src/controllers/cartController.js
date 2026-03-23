@@ -1,5 +1,6 @@
 const prisma = require('../config/database');
 const { asyncHandler } = require('../utils/asyncHandler');
+const packagePricingService = require('../services/packagePricingService');
 
 const cartWithItems = {
   include: {
@@ -8,10 +9,31 @@ const cartWithItems = {
         product: true,
         variant: true,
         service: true,
+        package: {
+          include: {
+            options: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+            taxonomy: true,
+          },
+        },
       },
     },
   },
 };
+
+async function itemLineTotal(item) {
+  if (item.package) {
+    const customization = (item.packageCustomization && typeof item.packageCustomization === 'object')
+      ? item.packageCustomization
+      : {};
+    const { price } = await packagePricingService.computePackagePrice(item.packageId, customization);
+    return price * item.quantity;
+  }
+  if (item.service) {
+    return Number(item.service.price) * item.quantity;
+  }
+  const price = item.variant && item.variant.price != null ? item.variant.price : item.product?.price;
+  return (price ? Number(price) : 0) * item.quantity;
+}
 
 const getCart = asyncHandler(async (req, res) => {
   let cart = await prisma.cart.findUnique({
@@ -24,14 +46,30 @@ const getCart = asyncHandler(async (req, res) => {
       ...cartWithItems,
     });
   }
-  res.json({ success: true, data: cart });
+  const itemsWithPrice = await Promise.all(
+    cart.items.map(async (item) => {
+      const lineTotal = await itemLineTotal(item);
+      return { ...item, lineTotal };
+    })
+  );
+  res.json({ success: true, data: { ...cart, items: itemsWithPrice } });
 });
 
 const addToCart = asyncHandler(async (req, res) => {
-  const { productId, variantId, serviceId, quantity: rawQty } = req.body;
+  const { productId, variantId, serviceId, packageId, quantity: rawQty, customization } = req.body;
   const quantity = Math.max(1, parseInt(rawQty, 10) || 1);
 
-  if (serviceId) {
+  if (packageId) {
+    const pkg = await prisma.package.findUnique({ where: { id: packageId } });
+    if (!pkg || !pkg.isActive) {
+      return res.status(404).json({ success: false, error: 'Package not found' });
+    }
+    const custom = customization && typeof customization === 'object' ? customization : {};
+    const validation = await packagePricingService.validateCustomization(packageId, custom);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, error: 'Invalid customization', errors: validation.errors });
+    }
+  } else if (serviceId) {
     const service = await prisma.service.findUnique({ where: { id: serviceId } });
     if (!service || !service.isActive) {
       return res.status(404).json({ success: false, error: 'Service not found' });
@@ -48,7 +86,7 @@ const addToCart = asyncHandler(async (req, res) => {
       return res.status(422).json({ success: false, error: 'Insufficient stock available' });
     }
   } else {
-    return res.status(400).json({ success: false, error: 'productId or serviceId is required' });
+    return res.status(400).json({ success: false, error: 'productId, serviceId, or packageId is required' });
   }
 
   let cart = await prisma.cart.findUnique({
@@ -62,11 +100,23 @@ const addToCart = asyncHandler(async (req, res) => {
     });
   }
 
-  const existing = cart.items.find(
-    (i) =>
-      (productId && i.productId === productId && (variantId ? i.variantId === variantId : !i.variantId)) ||
-      (serviceId && i.serviceId === serviceId)
-  );
+  const customJson = packageId && customization && typeof customization === 'object'
+    ? JSON.stringify(customization)
+    : null;
+
+  const existing = cart.items.find((i) => {
+    if (packageId) {
+      const sameCustom = (i.packageCustomization && typeof i.packageCustomization === 'object')
+        ? JSON.stringify(i.packageCustomization) === customJson
+        : !customJson;
+      return i.packageId === packageId && sameCustom;
+    }
+    if (productId) {
+      return i.productId === productId && (variantId ? i.variantId === variantId : !i.variantId);
+    }
+    return serviceId && i.serviceId === serviceId;
+  });
+
   if (existing) {
     await prisma.cartItem.update({
       where: { id: existing.id },
@@ -79,6 +129,8 @@ const addToCart = asyncHandler(async (req, res) => {
         productId: productId || null,
         variantId: variantId || null,
         serviceId: serviceId || null,
+        packageId: packageId || null,
+        packageCustomization: packageId && customization && typeof customization === 'object' ? customization : null,
         quantity,
       },
     });
@@ -88,16 +140,23 @@ const addToCart = asyncHandler(async (req, res) => {
     where: { id: cart.id },
     ...cartWithItems,
   });
-  res.json({ success: true, data: updated });
+  const itemsWithPrice = await Promise.all(
+    updated.items.map(async (item) => {
+      const lineTotal = await itemLineTotal(item);
+      return { ...item, lineTotal };
+    })
+  );
+  res.json({ success: true, data: { ...updated, items: itemsWithPrice } });
 });
 
 const updateCartItem = asyncHandler(async (req, res) => {
   const { itemId } = req.params;
   const quantity = Math.max(1, parseInt(req.body.quantity, 10) || 1);
+  const customization = req.body.customization;
 
   const cart = await prisma.cart.findUnique({
     where: { userId: req.user.id },
-    include: { items: { include: { product: true, variant: true } } },
+    include: { items: { include: { product: true, variant: true, package: true } } },
   });
   if (!cart) {
     return res.status(404).json({ success: false, error: 'Cart not found' });
@@ -106,24 +165,44 @@ const updateCartItem = asyncHandler(async (req, res) => {
   if (!item) {
     return res.status(404).json({ success: false, error: 'Cart item not found' });
   }
-  const stock = item.variant
-    ? item.variant.stock
-    : item.product
-      ? item.product.stock
-      : null;
-  if (stock != null && stock < quantity) {
-    return res.status(422).json({ success: false, error: 'Insufficient stock available' });
+
+  if (item.packageId) {
+    if (customization !== undefined) {
+      const custom = customization && typeof customization === 'object' ? customization : {};
+      const validation = await packagePricingService.validateCustomization(item.packageId, custom);
+      if (!validation.valid) {
+        return res.status(400).json({ success: false, error: 'Invalid customization', errors: validation.errors });
+      }
+    }
+    const updateData = { quantity };
+    if (customization !== undefined) updateData.packageCustomization = customization && typeof customization === 'object' ? customization : null;
+    await prisma.cartItem.update({ where: { id: itemId }, data: updateData });
+  } else {
+    const stock = item.variant
+      ? item.variant.stock
+      : item.product
+        ? item.product.stock
+        : null;
+    if (stock != null && stock < quantity) {
+      return res.status(422).json({ success: false, error: 'Insufficient stock available' });
+    }
+    await prisma.cartItem.update({
+      where: { id: itemId },
+      data: { quantity },
+    });
   }
 
-  await prisma.cartItem.update({
-    where: { id: itemId },
-    data: { quantity },
-  });
   const updated = await prisma.cart.findUnique({
     where: { id: cart.id },
     ...cartWithItems,
   });
-  res.json({ success: true, data: updated });
+  const itemsWithPrice = await Promise.all(
+    updated.items.map(async (i) => {
+      const lineTotal = await itemLineTotal(i);
+      return { ...i, lineTotal };
+    })
+  );
+  res.json({ success: true, data: { ...updated, items: itemsWithPrice } });
 });
 
 const removeFromCart = asyncHandler(async (req, res) => {
@@ -144,7 +223,13 @@ const removeFromCart = asyncHandler(async (req, res) => {
     where: { id: cart.id },
     ...cartWithItems,
   });
-  res.json({ success: true, message: 'Item removed from cart', data: updated });
+  const itemsWithPrice = await Promise.all(
+    (updated?.items ?? []).map(async (i) => {
+      const lineTotal = await itemLineTotal(i);
+      return { ...i, lineTotal };
+    })
+  );
+  res.json({ success: true, message: 'Item removed from cart', data: { ...updated, items: itemsWithPrice } });
 });
 
 const clearCart = asyncHandler(async (req, res) => {
@@ -157,21 +242,14 @@ const clearCart = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Cart cleared successfully' });
 });
 
-function itemLineTotal(item) {
-  if (item.service) {
-    return Number(item.service.price) * item.quantity;
-  }
-  const price = item.variant && item.variant.price != null ? item.variant.price : item.product?.price;
-  return (price ? Number(price) : 0) * item.quantity;
-}
-
 const calculateCart = asyncHandler(async (req, res) => {
   const cart = await prisma.cart.findUnique({
     where: { userId: req.user.id },
     ...cartWithItems,
   });
   const items = cart?.items ?? [];
-  const subtotal = items.reduce((sum, item) => sum + itemLineTotal(item), 0);
+  const lineTotals = await Promise.all(items.map((item) => itemLineTotal(item)));
+  const subtotal = lineTotals.reduce((sum, lt) => sum + lt, 0);
   const tax = 0;
   const shipping = 0;
   const discount = 0;
