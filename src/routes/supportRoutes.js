@@ -5,6 +5,7 @@ const { auth } = require('../middleware/auth');
 
 // Public routes
 router.get('/faqs', supportController.getFAQs);
+router.post('/contact', supportController.submitContact);
 
 // Protected routes
 router.use(auth);
