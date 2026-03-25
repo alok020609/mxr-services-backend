@@ -2,6 +2,7 @@ const prisma = require('../config/database');
 const logger = require('../utils/logger');
 const twilio = require('twilio');
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const { AdminSMSServiceService } = require('./adminSMSServiceService');
 const { AdminEmailServiceService } = require('./adminEmailServiceService');
 
@@ -81,6 +82,60 @@ class IntegrationsService {
 
   // Email integration with database config support
   static async sendEmail({ to, subject, text, html, cc, bcc, attachments }) {
+    // Resend-first: if RESEND_API_KEY exists, route all transactional emails through Resend.
+    if (process.env.RESEND_API_KEY) {
+      const resendFromEmail =
+        process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+      if (!resendFromEmail) {
+        throw new Error('Resend sender email is not configured. Set RESEND_FROM_EMAIL (preferred).');
+      }
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      const normalizedAttachments = Array.isArray(attachments)
+        ? attachments
+            .map((a) => {
+              if (!a || typeof a !== 'object') return null;
+              const att = {};
+              if (a.filename) att.filename = a.filename;
+              if (a.path) att.path = a.path;
+              if (a.content != null) att.content = a.content;
+              // Resend requires `filename` for most attachment types.
+              return att.filename ? att : null;
+            })
+            .filter(Boolean)
+        : undefined;
+
+      const from = `MXR Services <${resendFromEmail}>`;
+
+      const { data, error } = await resend.emails.send({
+        from,
+        to,
+        subject,
+        text,
+        html,
+        cc: cc ? (Array.isArray(cc) ? cc : [cc]) : undefined,
+        bcc: bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined,
+        attachments: normalizedAttachments,
+      });
+
+      if (error) {
+        logger.error('Resend email sending error:', {
+          to,
+          subject,
+          error: error.message || error,
+        });
+        throw new Error(error.message || 'Resend email sending failed');
+      }
+
+      return {
+        success: true,
+        messageId: data?.id || null,
+        accepted: [],
+        rejected: [],
+      };
+    }
+
     let emailService = null;
 
     let transporter = null;

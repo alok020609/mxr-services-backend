@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const logger = require('./logger');
+const { Resend } = require('resend');
 
 // Check if SMTP is configured via environment
 const isSMTPConfigured = () => {
@@ -81,12 +82,44 @@ const getTransporter = async () => {
  * @param {string} firstName - User's first name (optional)
  */
 const sendVerificationEmail = async (email, token, firstName = '') => {
-  const transport = await getTransporter();
-  if (!transport) {
-    logger.warn(`Email verification skipped - SMTP not configured. Would send to: ${email}`);
-    return;
+  let from = null;
+  let sendFn = null;
+
+  if (process.env.RESEND_API_KEY) {
+    const resendFromEmail =
+      process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+    if (!resendFromEmail) {
+      logger.warn(`Email verification skipped - Resend sender not configured. Would send to: ${email}`);
+      return;
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    from = `MXR Services <${resendFromEmail}>`;
+
+    sendFn = async ({ to, subject, text, html }) => {
+      const { data, error } = await resend.emails.send({
+        from,
+        to,
+        subject,
+        text,
+        html,
+      });
+      if (error) throw new Error(error.message || 'Resend email send failed');
+      return data?.id || null;
+    };
+  } else {
+    const transport = await getTransporter();
+    if (!transport) {
+      logger.warn(`Email verification skipped - SMTP not configured. Would send to: ${email}`);
+      return;
+    }
+    const { transporter, from: transportFrom } = transport;
+    from = transportFrom;
+    sendFn = async ({ to, subject, text, html }) => {
+      const info = await transporter.sendMail({ from, to, subject, text, html });
+      return info.messageId;
+    };
   }
-  const { transporter, from } = transport;
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   // Link points to frontend so user lands on the app; frontend calls GET /api/v1/auth/verify-email/:token
@@ -160,16 +193,13 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
   `;
 
   try {
-    const mailOptions = {
-      from,
+    const messageId = await sendFn({
       to: email,
       subject: 'Verify Your Email Address',
       text: textContent,
       html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`Verification email sent to ${email}: ${info.messageId}`);
+    });
+    logger.info(`Verification email sent to ${email}: ${messageId}`);
   } catch (error) {
     logger.error(`Failed to send verification email to ${email}:`, error);
     // Don't throw - we don't want email failures to break registration
@@ -183,12 +213,44 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
  * @param {string} firstName - User's first name (optional)
  */
 const sendPasswordResetEmail = async (email, token, firstName = '') => {
-  const transport = await getTransporter();
-  if (!transport) {
-    logger.warn(`Password reset email skipped - SMTP not configured. Would send to: ${email}`);
-    return;
+  let from = null;
+  let sendFn = null;
+
+  if (process.env.RESEND_API_KEY) {
+    const resendFromEmail =
+      process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+    if (!resendFromEmail) {
+      logger.warn(`Password reset email skipped - Resend sender not configured. Would send to: ${email}`);
+      return;
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    from = `MXR Services <${resendFromEmail}>`;
+
+    sendFn = async ({ to, subject, text, html }) => {
+      const { data, error } = await resend.emails.send({
+        from,
+        to,
+        subject,
+        text,
+        html,
+      });
+      if (error) throw new Error(error.message || 'Resend email send failed');
+      return data?.id || null;
+    };
+  } else {
+    const transport = await getTransporter();
+    if (!transport) {
+      logger.warn(`Password reset email skipped - SMTP not configured. Would send to: ${email}`);
+      return;
+    }
+    const { transporter, from: transportFrom } = transport;
+    from = transportFrom;
+    sendFn = async ({ to, subject, text, html }) => {
+      const info = await transporter.sendMail({ from, to, subject, text, html });
+      return info.messageId;
+    };
   }
-  const { transporter, from } = transport;
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
@@ -261,16 +323,13 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
   `;
 
   try {
-    const mailOptions = {
-      from,
+    const messageId = await sendFn({
       to: email,
       subject: 'Reset Your Password',
       text: textContent,
       html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`Password reset email sent to ${email}: ${info.messageId}`);
+    });
+    logger.info(`Password reset email sent to ${email}: ${messageId}`);
   } catch (error) {
     logger.error(`Failed to send password reset email to ${email}:`, error);
     // Don't throw - we don't want email failures to break password reset
@@ -285,12 +344,42 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
  */
 const sendContactSubmissionNotification = async (toEmail, submission) => {
   if (!toEmail || typeof toEmail !== 'string' || !toEmail.trim()) return;
-  const transport = await getTransporter();
-  if (!transport) {
-    logger.warn('Contact submission notification skipped - SMTP not configured.');
-    return;
+
+  let from = null;
+  let sendFn = null;
+  if (process.env.RESEND_API_KEY) {
+    const resendFromEmail =
+      process.env.RESEND_FROM_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER;
+    if (!resendFromEmail) {
+      logger.warn('Contact submission notification skipped - Resend sender not configured.');
+      return;
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    from = `MXR Services <${resendFromEmail}>`;
+    sendFn = async ({ to, subject, text, html }) => {
+      const { error } = await resend.emails.send({
+        from,
+        to,
+        subject,
+        text,
+        html,
+      });
+      if (error) throw new Error(error.message || 'Resend email send failed');
+    };
+  } else {
+    const transport = await getTransporter();
+    if (!transport) {
+      logger.warn('Contact submission notification skipped - SMTP not configured.');
+      return;
+    }
+    const { transporter, from: transportFrom } = transport;
+    from = transportFrom;
+    sendFn = async ({ to, subject, text, html }) => {
+      await transporter.sendMail({ from, to, subject, text, html });
+    };
   }
-  const { transporter, from } = transport;
+
   const { name, email, phone, message, freeSiteVisit } = submission;
   const phoneLine = phone ? `<p><strong>Phone:</strong> ${phone}</p>` : '';
   const siteVisitLine = freeSiteVisit ? '<p><strong>Free site visit requested:</strong> Yes</p>' : '';
@@ -311,8 +400,7 @@ const sendContactSubmissionNotification = async (toEmail, submission) => {
   `;
   const textContent = `New Contact Form Submission\n\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ''}${freeSiteVisit ? '\nFree site visit: Yes' : ''}\n\nMessage:\n${message || ''}`;
   try {
-    await transporter.sendMail({
-      from,
+    await sendFn({
       to: toEmail.trim(),
       subject: 'New Contact Form Submission',
       text: textContent,
