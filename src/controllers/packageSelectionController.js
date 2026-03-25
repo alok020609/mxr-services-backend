@@ -77,64 +77,95 @@ const submitPackageSelection = asyncHandler(async (req, res) => {
   };
 
   const fullMessageHtml = `
-    <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto;">
-      <div style="padding: 18px 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-        <div style="margin-bottom: 14px;">
-          <div style="font-size: 14px; color: #6b7280;">MXR Services</div>
-          <div style="font-size: 20px; font-weight: 700; color: #111827;">Package Selection Confirmation</div>
-        </div>
-
-        <div style="margin-top: 12px;">
-          <p style="margin: 0 0 10px 0; font-size: 14px; color: #374151;">
-            Hello ${escapeHtml(user.firstName || userName || '')}${user.firstName ? ',' : ''} <br/>
-            Thank you for your interest. We have received your package selection.
-          </p>
-        </div>
-
-        <div style="margin-top: 18px;">
-          <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 8px;">
-            Selected Package Details
-          </div>
-          <table style="width:100%; border-collapse: collapse;">
-            <tbody>
-              <tr>
-                <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; width: 30%;">Category</td>
-                <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(category)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Package Name</td>
-                <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(name)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Price</td>
-                <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(price)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Popular</td>
-                <td style="padding: 10px; border: 1px solid #e5e7eb;">${isPopular ? 'Yes' : 'No'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Features</td>
-                <td style="padding: 10px; border: 1px solid #e5e7eb;">
-                  <ul style="margin:0; padding-left: 18px;">
-                    ${features.map((f) => `<li style="margin: 2px 0;">${escapeHtml(f)}</li>`).join('')}
-                  </ul>
-                </td>
-              </tr>
-            </tbody>
+    <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 0 12px;">
+      <div style="border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; background: #ffffff;">
+        <div style="padding: 16px 20px; background: linear-gradient(90deg, #2563eb 0%, #06b6d4 100%);">
+          <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="width: 56px; vertical-align: middle;">
+                <img
+                  src="https://mxrservices.in/mainlogo.png"
+                  alt="MXR Services"
+                  style="width: 48px; height: 48px; object-fit: contain; display: block; border-radius: 12px; background: rgba(255,255,255,0.25);"
+                />
+              </td>
+              <td style="vertical-align: middle;">
+                <div style="font-size: 14px; color: #e0f2fe; font-weight: 700; margin-bottom: 2px;">MXR Services</div>
+                <div style="font-size: 20px; color: #ffffff; font-weight: 800;">Package Selection Confirmation</div>
+              </td>
+            </tr>
           </table>
         </div>
 
-        <div style="margin-top: 18px;">
-          <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 8px;">
-            Next Steps
+        <div style="padding: 20px;">
+          <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px;">
+            <div style="font-size: 14px; color: #0c4a6e; font-weight: 800; margin-bottom: 6px;">
+              Hello ${escapeHtml(user.firstName || userName || '')}${user.firstName ? ',' : ''}
+            </div>
+            <div style="font-size: 14px; color: #334155; line-height: 1.6;">
+              Thank you for your interest. We have received your package selection.
+            </div>
           </div>
-          <p style="margin: 0; font-size: 14px; color: #374151;">
-            One of our team members will talk to you regarding this package.
-          </p>
+
+          <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; margin-bottom: 16px;">
+            <div style="font-size: 14px; font-weight: 900; color: #111827; margin-bottom: 12px;">
+              Package Summary
+            </div>
+
+            <table style="width:100%; border-collapse: collapse;">
+              <tbody>
+                <tr>
+                  <td style="padding: 10px 8px; font-weight: 700; color: #1f2937; width: 30%;">Category</td>
+                  <td style="padding: 10px 8px;">
+                    <span style="display:inline-block; background:#dbeafe; color:#1d4ed8; border:1px solid #bfdbfe; padding:6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;">${escapeHtml(category)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 8px; font-weight: 700; color: #1f2937;">Package Name</td>
+                  <td style="padding: 10px 8px;">
+                    <span style="display:inline-block; background:#fef3c7; color:#92400e; border:1px solid #fde68a; padding:6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;">${escapeHtml(name)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 8px; font-weight: 700; color: #1f2937;">Price</td>
+                  <td style="padding: 10px 8px;">
+                    <span style="display:inline-block; background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;">${escapeHtml(price)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 8px; font-weight: 700; color: #1f2937;">Popular</td>
+                  <td style="padding: 10px 8px;">
+                    <span style="display:inline-block; background:${isPopular ? '#dbeafe' : '#f3f4f6'}; color:${isPopular ? '#1d4ed8' : '#374151'}; border:1px solid #e5e7eb; padding:6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700;">${isPopular ? 'Yes' : 'No'}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; margin-bottom: 16px;">
+            <div style="font-size: 14px; font-weight: 900; color: #111827; margin-bottom: 10px;">Features</div>
+            <div style="line-height: 1.4;">
+              ${features
+                .map(
+                  (f) => `
+                    <span style="display:inline-block; background:#e0f2fe; color:#075985; border:1px solid #bae6fd; padding:8px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; margin: 0 8px 10px 0;">
+                      ${escapeHtml(f)}
+                    </span>
+                  `
+                )
+                .join('')}
+            </div>
+          </div>
+
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 14px; padding: 14px 16px;">
+            <div style="font-size: 14px; font-weight: 900; color: #166534; margin-bottom: 6px;">Next Steps</div>
+            <div style="font-size: 14px; color: #14532d; line-height: 1.6;">
+              One of our team members will talk to you regarding this package.
+            </div>
+          </div>
         </div>
 
-        <div style="margin-top: 22px; padding-top: 14px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px;">
+        <div style="padding: 14px 20px; background: #f8fafc; color: #6b7280; font-size: 13px; border-top: 1px solid #e5e7eb;">
           Regards,<br/>
           <strong style="color:#111827;">MXR Services</strong>
         </div>
@@ -200,59 +231,80 @@ const submitPackageSelection = asyncHandler(async (req, res) => {
 
       const adminSubject = `MXR Services - New Package Selection Lead: ${name}`;
       const adminHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto;">
-          <div style="padding: 18px 20px; border: 1px solid #e5e7eb; border-radius: 12px;">
-            <div style="margin-bottom: 10px;">
-              <div style="font-size: 14px; color: #6b7280;">MXR Services</div>
-              <div style="font-size: 20px; font-weight: 700; color: #111827;">New Package Selection Lead</div>
-            </div>
-
-            <div style="margin-top: 12px;">
-              <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 8px;">
-                Lead Submitted By
+        <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto; padding: 0;">
+          <div style="border-radius: 16px; overflow: hidden; background: #0b5fff;">
+            <div style="padding: 18px 20px; display: flex; align-items: center; gap: 14px;">
+              <img
+                src="https://mxrservices.in/mainlogo.png"
+                width="56"
+                height="56"
+                alt="MXR Services"
+                style="display:block; border-radius: 12px; background:#ffffff;"
+              />
+              <div>
+                <div style="font-size: 13px; color: rgba(255,255,255,0.9); font-weight: 600; letter-spacing: 0.2px;">
+                  MXR Services
+                </div>
+                <div style="font-size: 20px; font-weight: 800; color: #ffffff; line-height: 1.2;">
+                  New Package Selection Lead
+                </div>
               </div>
-              <table style="width:100%; border-collapse: collapse;">
-                <tbody>
-                  <tr>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600; width: 30%;">Name</td>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(userName)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Email</td>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(userEmail)}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Phone</td>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(phone || '')}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: 600;">Lead ID</td>
-                    <td style="padding: 10px; border: 1px solid #e5e7eb;">${escapeHtml(submission.id)}</td>
-                  </tr>
-                </tbody>
-              </table>
+            </div>
+          </div>
+
+          <div style="padding: 18px 20px; background: #ffffff; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 16px 16px;">
+            <div style="margin-top: 0;">
+              <div style="font-size: 14px; font-weight: 900; color: #111827; margin-bottom: 10px;">
+                Lead Details
+              </div>
+
+              <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px 14px;">
+                <table style="width:100%; border-collapse: collapse;">
+                  <tbody>
+                    <tr>
+                      <td style="padding: 8px 0; width: 32%; font-size: 12px; font-weight: 700; color: #6b7280;">Name</td>
+                      <td style="padding: 8px 0; font-size: 13px; font-weight: 700; color: #111827;">${escapeHtml(userName)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; font-size: 12px; font-weight: 700; color: #6b7280;">Email</td>
+                      <td style="padding: 8px 0; font-size: 13px; font-weight: 700; color: #111827;">${escapeHtml(userEmail)}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; font-size: 12px; font-weight: 700; color: #6b7280;">Phone</td>
+                      <td style="padding: 8px 0; font-size: 13px; font-weight: 700; color: #111827;">${escapeHtml(phone || '')}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0; font-size: 12px; font-weight: 700; color: #6b7280;">Lead ID</td>
+                      <td style="padding: 8px 0; font-size: 13px; font-weight: 800; color: #0b5fff;">${escapeHtml(submission.id)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div style="margin-top: 18px;">
-              <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 8px;">
+            <div style="margin-top: 16px;">
+              <div style="font-size: 14px; font-weight: 900; color: #111827; margin-bottom: 10px;">
                 Selected Package Summary
               </div>
-              <ul style="margin:0; padding-left: 18px;">
-                <li><strong>Category:</strong> ${escapeHtml(category)}</li>
-                <li><strong>Package:</strong> ${escapeHtml(name)}</li>
-                <li><strong>Price:</strong> ${escapeHtml(price)}</li>
-                <li><strong>Popular:</strong> ${isPopular ? 'Yes' : 'No'}</li>
-              </ul>
+
+              <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 16px;">
+                <ul style="margin: 0; padding-left: 18px; color: #111827; line-height: 1.8;">
+                  <li><strong style="color:#0b5fff;">Category:</strong> ${escapeHtml(category)}</li>
+                  <li><strong style="color:#0b5fff;">Package:</strong> ${escapeHtml(name)}</li>
+                  <li><strong style="color:#0b5fff;">Price:</strong> ${escapeHtml(price)}</li>
+                  <li><strong style="color:#0b5fff;">Popular:</strong> ${isPopular ? 'Yes' : 'No'}</li>
+                </ul>
+              </div>
             </div>
 
-            <div style="margin-top: 18px;">
-              <div style="font-size: 14px; font-weight: 700; color: #111827; margin-bottom: 8px;">
+            <div style="margin-top: 16px;">
+              <div style="font-size: 14px; font-weight: 900; color: #111827; margin-bottom: 10px;">
                 Full Payload
               </div>
               ${asJsonPreBlock(selectedPackage)}
             </div>
 
-            <div style="margin-top: 22px; padding-top: 14px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px;">
+            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 13px;">
               Regards,<br/>
               <strong style="color:#111827;">MXR Services</strong>
             </div>
