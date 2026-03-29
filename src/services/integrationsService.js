@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const twilio = require('twilio');
 const nodemailer = require('nodemailer');
 const { Resend } = require('resend');
+const { mergeDefaultCc } = require('../utils/email');
 const { AdminSMSServiceService } = require('./adminSMSServiceService');
 const { AdminEmailServiceService } = require('./adminEmailServiceService');
 
@@ -82,31 +83,7 @@ class IntegrationsService {
 
   // Email integration with database config support
   static async sendEmail({ to, subject, text, html, cc, bcc, attachments }) {
-    const defaultCc = 'info@mxrservices.in';
-    const normalizeCc = (ccValue) => {
-      if (!ccValue) return [];
-      const list = Array.isArray(ccValue) ? ccValue : [ccValue];
-      return list
-        .filter(Boolean)
-        // Allow comma-separated string input defensively
-        .flatMap((v) => (typeof v === 'string' && v.includes(',') ? v.split(',') : [v]))
-        .map((v) => String(v).trim())
-        .filter(Boolean);
-    };
-
-    // Always include default CC, deduped case-insensitively.
-    const ccList = (() => {
-      const merged = [defaultCc, ...normalizeCc(cc)];
-      const seen = new Set();
-      const out = [];
-      for (const addr of merged) {
-        const key = addr.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(addr);
-      }
-      return out;
-    })();
+    const ccList = mergeDefaultCc(cc);
 
     // Resend-first: if RESEND_API_KEY exists, route all transactional emails through Resend.
     if (process.env.RESEND_API_KEY) {

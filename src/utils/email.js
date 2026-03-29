@@ -2,7 +2,34 @@ const nodemailer = require('nodemailer');
 const logger = require('./logger');
 const { Resend } = require('resend');
 
-const defaultCc = 'info@mxrservices.in';
+const DEFAULT_CC = 'info@mxrservices.in';
+
+/**
+ * Merge DEFAULT_CC into cc with case-insensitive deduplication.
+ * @param {string|string[]|undefined} cc
+ * @returns {string[]}
+ */
+function mergeDefaultCc(cc) {
+  const normalizeCc = (ccValue) => {
+    if (!ccValue) return [];
+    const list = Array.isArray(ccValue) ? ccValue : [ccValue];
+    return list
+      .filter(Boolean)
+      .flatMap((v) => (typeof v === 'string' && v.includes(',') ? v.split(',') : [v]))
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+  };
+  const merged = [DEFAULT_CC, ...normalizeCc(cc)];
+  const seen = new Set();
+  const out = [];
+  for (const addr of merged) {
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(addr);
+  }
+  return out;
+}
 
 // Check if SMTP is configured via environment
 const isSMTPConfigured = () => {
@@ -105,7 +132,7 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
         subject,
         text,
         html,
-        cc: [defaultCc],
+        cc: mergeDefaultCc(),
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
       return data?.id || null;
@@ -119,7 +146,7 @@ const sendVerificationEmail = async (email, token, firstName = '') => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      const info = await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
+      const info = await transporter.sendMail({ from, to, subject, text, html, cc: mergeDefaultCc() });
       return info.messageId;
     };
   }
@@ -237,7 +264,7 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
         subject,
         text,
         html,
-        cc: [defaultCc],
+        cc: mergeDefaultCc(),
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
       return data?.id || null;
@@ -251,7 +278,7 @@ const sendPasswordResetEmail = async (email, token, firstName = '') => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      const info = await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
+      const info = await transporter.sendMail({ from, to, subject, text, html, cc: mergeDefaultCc() });
       return info.messageId;
     };
   }
@@ -368,7 +395,7 @@ const sendContactSubmissionNotification = async (toEmail, submission) => {
         subject,
         text,
         html,
-        cc: [defaultCc],
+        cc: mergeDefaultCc(),
       });
       if (error) throw new Error(error.message || 'Resend email send failed');
     };
@@ -381,7 +408,7 @@ const sendContactSubmissionNotification = async (toEmail, submission) => {
     const { transporter, from: transportFrom } = transport;
     from = transportFrom;
     sendFn = async ({ to, subject, text, html }) => {
-      await transporter.sendMail({ from, to, subject, text, html, cc: [defaultCc] });
+      await transporter.sendMail({ from, to, subject, text, html, cc: mergeDefaultCc() });
     };
   }
 
@@ -423,5 +450,6 @@ module.exports = {
   sendContactSubmissionNotification,
   isSMTPConfigured,
   getTransporter,
+  mergeDefaultCc,
 };
 
