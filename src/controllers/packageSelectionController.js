@@ -1,7 +1,6 @@
 const prisma = require('../config/database');
 const { asyncHandler } = require('../utils/asyncHandler');
 const logger = require('../utils/logger');
-const mailSettingsService = require('../services/mailSettingsService');
 const { IntegrationsService } = require('../services/integrationsService');
 
 function normalizeSelectedPackage(body) {
@@ -25,11 +24,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
-}
-
-function asJsonPreBlock(obj) {
-  const json = JSON.stringify(obj, null, 2);
-  return `<pre style="margin:0;background:#fafafa;border:1px solid #e4e4e7;padding:12px 14px;border-radius:6px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;line-height:1.45;color:#334155;">${escapeHtml(json)}</pre>`;
 }
 
 const EMAIL_FONT =
@@ -175,7 +169,7 @@ const submitPackageSelection = asyncHandler(async (req, res) => {
     },
   });
 
-  // 1) Email confirmation to user (non-blocking)
+  // Email confirmation to user (non-blocking)
   const userSubject = `MXR Services - Package Selection Confirmation: ${name}`;
   try {
     await IntegrationsService.sendEmail({
@@ -196,114 +190,6 @@ const submitPackageSelection = asyncHandler(async (req, res) => {
       data: { id: submission.id, createdAt: submission.createdAt },
     });
   }
-
-  // 2) Notify internal team/admin email (non-blocking)
-  mailSettingsService
-    .getMailSettings()
-    .then((s) => s.config?.contactNotificationEmail)
-    .then((toNotify) => {
-      const recipient =
-        (toNotify && typeof toNotify === 'string' && toNotify.trim() ? toNotify.trim() : '') ||
-        (process.env.CONTACT_NOTIFICATION_EMAIL || process.env.SMTP_USER || '').trim();
-
-      if (!recipient) return;
-
-      const adminSubject = `MXR Services - New Package Selection Lead: ${name}`;
-      const adminHtml = `
-<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f4f4f5;">
-  <tr>
-    <td align="center" style="padding:24px 12px;font-family:${EMAIL_FONT};">
-      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;border-collapse:collapse;background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;overflow:hidden;">
-        <tr>
-          <td style="height:3px;line-height:3px;font-size:0;background:#2563eb;">&nbsp;</td>
-        </tr>
-        <tr>
-          <td style="padding:20px 24px;border-bottom:1px solid #e4e4e7;background:#ffffff;">
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
-              <tr>
-                <td width="48" valign="middle" style="padding:0;">
-                  <img src="https://mxrservices.in/mainlogo.png" width="48" height="48" alt="MXR Services" style="display:block;width:48px;height:48px;object-fit:contain;border-radius:8px;border:0;" />
-                </td>
-                <td valign="middle" style="padding:0 0 0 14px;">
-                  <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;font-weight:600;">MXR Services</div>
-                  <div style="font-size:16px;font-weight:600;color:#0f172a;line-height:1.3;margin-top:4px;">New package selection lead</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:24px;">
-            <p style="margin:0 0 10px 0;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;font-weight:600;">Lead details</p>
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin-bottom:24px;border:1px solid #e4e4e7;border-radius:8px;background:#f8fafc;">
-              <tr>
-                <td style="padding:14px 16px;">
-                  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
-                    <tr>
-                      <td style="padding:8px 0;vertical-align:top;width:34%;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;border-bottom:1px solid #f4f4f5;">Name</td>
-                      <td style="padding:8px 0;font-size:14px;color:#0f172a;border-bottom:1px solid #f4f4f5;">${escapeHtml(userName)}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:8px 0;vertical-align:top;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;border-bottom:1px solid #f4f4f5;">Email</td>
-                      <td style="padding:8px 0;font-size:14px;color:#0f172a;border-bottom:1px solid #f4f4f5;">${escapeHtml(userEmail)}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:8px 0;vertical-align:top;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;border-bottom:1px solid #f4f4f5;">Phone</td>
-                      <td style="padding:8px 0;font-size:14px;color:#0f172a;border-bottom:1px solid #f4f4f5;">${escapeHtml(phone || '')}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:8px 0;vertical-align:top;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;">Lead ID</td>
-                      <td style="padding:8px 0;font-size:14px;font-weight:600;color:#2563eb;">${escapeHtml(submission.id)}</td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:0 0 10px 0;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;font-weight:600;">Selected package</p>
-            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin-bottom:24px;">
-              <tr>
-                <td style="padding:10px 0;vertical-align:top;width:34%;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;border-bottom:1px solid #f4f4f5;">Category</td>
-                <td style="padding:10px 0;font-size:14px;color:#0f172a;line-height:1.5;border-bottom:1px solid #f4f4f5;">${escapeHtml(category)}</td>
-              </tr>
-              <tr>
-                <td style="padding:10px 0;vertical-align:top;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;border-bottom:1px solid #f4f4f5;">Package</td>
-                <td style="padding:10px 0;font-size:14px;color:#0f172a;line-height:1.5;border-bottom:1px solid #f4f4f5;">${escapeHtml(name)}</td>
-              </tr>
-              <tr>
-                <td style="padding:10px 0;vertical-align:top;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#64748b;font-weight:600;">Price</td>
-                <td style="padding:10px 0;font-size:14px;font-weight:600;color:#0f172a;line-height:1.5;">${escapeHtml(String(price))}</td>
-              </tr>
-            </table>
-            <p style="margin:0 0 10px 0;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#64748b;font-weight:600;">Full payload</p>
-            ${asJsonPreBlock(selectedPackage)}
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:16px 24px;border-top:1px solid #e4e4e7;background:#fafafa;">
-            <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;">Regards,<br /><span style="color:#0f172a;font-weight:600;">MXR Services</span></p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-      `;
-
-      const adminText = `MXR Services\n\nNew package selection lead\n\nSubmitted By:\n- Name: ${userName}\n- Email: ${userEmail}\n- Phone: ${phone || ''}\n- Lead ID: ${submission.id}\n\nSelected Package:\n- Category: ${category}\n- Package Name: ${name}\n- Price: ${price}\n\nFull Payload:\n${JSON.stringify(selectedPackage, null, 2)}`;
-
-      return IntegrationsService.sendEmail({
-        to: recipient,
-        subject: adminSubject,
-        text: adminText,
-        html: adminHtml,
-      });
-    })
-    .catch((err) => {
-      logger.error('Failed to resolve mail settings for package selection notification', {
-        submissionId: submission.id,
-        error: err.message,
-      });
-    });
 
   return res.status(201).json({
     success: true,
